@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014, Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2015, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -95,7 +95,7 @@ module_param(lpm_disconnect_thresh , uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(lpm_disconnect_thresh,
 	"Delay before entering LPM on USB disconnect");
 
-static bool floated_charger_enable = 1;/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150606  */
+static bool floated_charger_enable;
 module_param(floated_charger_enable , bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(floated_charger_enable,
 	"Whether to enable floated charger");
@@ -134,6 +134,11 @@ static u32 bus_freqs[USB_NUM_BUS_CLOCKS];	/* bimc, snoc, pcnoc clk */;
 static char bus_clkname[USB_NUM_BUS_CLOCKS][20] = {"bimc_clk", "snoc_clk",
 						"pcnoc_clk"};
 static bool bus_clk_rate_set;
+
+/* added by zhangrui for qcom OTG patch HQ01982382 20160705 begin */
+#include <linux/clk/msm-clk-provider.h>
+static DEFINE_MUTEX(oem_mutex);
+/* added by zhangrui for qcom OTG patch HQ01982382 20160705 end */
 
 static void
 msm_otg_dbg_log_event(struct usb_phy *phy, char *event, int d1, int d2)
@@ -1257,7 +1262,10 @@ static irqreturn_t msm_otg_phy_irq_handler(int irq, void *data)
 			pm_request_resume(motg->phy.dev);
 	} else {
 		pr_debug("PHY ID IRQ outside LPM\n");
-		msm_id_status_w(&motg->id_status_work.work);
+		/* added by zhangrui for qcom OTG patch HQ01982382 20160705 begin */
+		schedule_delayed_work(&motg->id_status_work, 0);
+		// msm_id_status_w(&motg->id_status_work.work);
+		/* added by zhangrui for qcom OTG patch HQ01982382 20160705 end */
 	}
 
 	return IRQ_HANDLED;
@@ -1521,6 +1529,13 @@ phcd_retry:
 
 	/* Ensure that above operation is completed before turning off clocks */
 	mb();
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 begin */
+	mutex_lock(&oem_mutex);
+	printk("[oem][usb][suspend+] prepare_count=%d, count=%d\n",
+		motg->core_clk->prepare_count,
+		motg->core_clk->count);
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 end */
+
 	/* Consider clocks on workaround flag only in case of bus suspend */
 	if (!(phy->state == OTG_STATE_B_PERIPHERAL &&
 		test_bit(A_BUS_SUSPEND, &motg->inputs)) ||
@@ -1558,6 +1573,12 @@ phcd_retry:
 		msm_hsusb_config_vddcx(0);
 		msm_hsusb_mhl_switch_enable(motg, 0);
 	}
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 begin */
+	mutex_unlock(&oem_mutex);
+	printk("[oem][usb][suspend-] prepare_count=%d, count=%d\n",
+		motg->core_clk->prepare_count,
+		motg->core_clk->count);
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 end */
 
 	if (device_may_wakeup(phy->dev)) {
 		if (motg->async_irq)
@@ -2366,6 +2387,22 @@ static bool msm_otg_read_phy_id_state(struct msm_otg *motg)
 {
 	u8 val;
 
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 begin */
+	mutex_lock(&oem_mutex);
+	printk("[oem][usb]: (%s) prepare_count=%d, count=%d\n",
+		__func__,
+		motg->core_clk->prepare_count,
+		motg->core_clk->count);
+	if (motg->core_clk->prepare_count == 0) {
+		printk("[oem][usb]: (%s) clock is off, resume it\n",
+			__func__);
+		pm_runtime_resume(motg->phy.otg->phy->dev);
+		printk("[oem][usb*]: (%s) prepare_count=%d, count=%d\n",
+			__func__,
+			motg->core_clk->prepare_count,
+			motg->core_clk->count);
+	}
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 end */
 	/*
 	 * clear the pending/outstanding interrupts and
 	 * read the ID status from the SRC_STATUS register.
@@ -2381,6 +2418,9 @@ static bool msm_otg_read_phy_id_state(struct msm_otg *motg)
 	writeb_relaxed(0x0, USB2_PHY_USB_PHY_IRQ_CMD);
 
 	val = readb_relaxed(USB2_PHY_USB_PHY_INTERRUPT_SRC_STATUS);
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 begin */
+	mutex_unlock(&oem_mutex);
+	/* added by zhangrui for qcom OTG patch HQ01982382 20160705 end */
 	if (val & USB_PHY_IDDIG_1_0)
 		return false; /* ID is grounded */
 	else
@@ -3282,6 +3322,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 				case USB_PROPRIETARY_CHARGER:
 					msm_otg_notify_charger(motg,
 							IDEV_CHG_MAX);
+					otg->phy->state =
+						OTG_STATE_B_CHARGER;
+					work = 0;
 					msm_otg_dbg_log_event(&motg->phy,
 					"PM RUNTIME: PROPCHG PUT",
 					get_pm_runtime_counter(otg->phy->dev),
@@ -3291,6 +3334,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 				case USB_FLOATED_CHARGER:
 					msm_otg_notify_charger(motg,
 							IDEV_CHG_MAX);
+					otg->phy->state =
+						OTG_STATE_B_CHARGER;
+					work = 0;
 					msm_otg_dbg_log_event(&motg->phy,
 					"PM RUNTIME: FLCHG PUT",
 					get_pm_runtime_counter(otg->phy->dev),
@@ -3506,6 +3552,16 @@ static void msm_otg_sm_work(struct work_struct *w)
 			}
 		} else if (test_bit(ID_C, &motg->inputs)) {
 			msm_otg_notify_charger(motg, IDEV_ACA_CHG_MAX);
+		}
+		break;
+	case OTG_STATE_B_CHARGER:
+		if (test_bit(B_SESS_VLD, &motg->inputs)) {
+			pr_debug("BSV set again\n");
+			msm_otg_dbg_log_event(&motg->phy, "BSV SET AGAIN",
+					motg->inputs, otg->phy->state);
+		} else if (!test_bit(B_SESS_VLD, &motg->inputs)) {
+			otg->phy->state = OTG_STATE_B_IDLE;
+			work = 1;
 		}
 		break;
 	case OTG_STATE_B_WAIT_ACON:
@@ -4216,6 +4272,8 @@ static void msm_id_status_w(struct work_struct *w)
 		id_state = msm_otg_read_phy_id_state(motg);
 
 	if (id_state) {
+		if (gpio_is_valid(motg->pdata->switch_sel_gpio))
+			gpio_direction_input(motg->pdata->switch_sel_gpio);
 		if (!test_and_set_bit(ID, &motg->inputs)) {
 			pr_debug("ID set\n");
 			msm_otg_dbg_log_event(&motg->phy, "ID SET",
@@ -4223,6 +4281,8 @@ static void msm_id_status_w(struct work_struct *w)
 			work = 1;
 		}
 	} else {
+		if (gpio_is_valid(motg->pdata->switch_sel_gpio))
+			gpio_direction_output(motg->pdata->switch_sel_gpio, 1);
 		if (test_and_clear_bit(ID, &motg->inputs)) {
 			pr_debug("ID clear\n");
 			msm_otg_dbg_log_event(&motg->phy, "ID CLEAR",
@@ -5237,7 +5297,18 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
 	if (pdata->pmic_id_irq < 0)
 		pdata->pmic_id_irq = 0;
 
-	pdata->usb_id_gpio = of_get_named_gpio(node, "qcom,usbid-gpio", 0);
+	pdata->hub_reset_gpio = of_get_named_gpio(
+			node, "qcom,hub-reset-gpio", 0);
+	if (pdata->hub_reset_gpio < 0)
+		pr_debug("hub_reset_gpio is not available\n");
+
+	pdata->switch_sel_gpio =
+			of_get_named_gpio(node, "qcom,sw-sel-gpio", 0);
+	if (pdata->switch_sel_gpio < 0)
+		pr_debug("switch_sel_gpio is not available\n");
+
+	pdata->usb_id_gpio =
+			of_get_named_gpio(node, "qcom,usbid-gpio", 0);
 	if (pdata->usb_id_gpio < 0)
 		pr_debug("usb_id_gpio is not available\n");
 
@@ -5758,6 +5829,42 @@ static int msm_otg_probe(struct platform_device *pdev)
 				motg->pdata->usb_id_gpio = 0;
 				goto remove_phy;
 			}
+
+			/* The following code implements switch between the HOST
+			 * mode to device mode when used diferent HW components
+			 * on the same port: USB HUB and the usb jack type B
+			 * for device mode In this case HUB should be gone
+			 * only once out of reset at the boot time and after
+			 * that always stay on*/
+			if (gpio_is_valid(motg->pdata->hub_reset_gpio))
+				ret = devm_gpio_request(&pdev->dev,
+						motg->pdata->hub_reset_gpio,
+						"qcom,hub-reset-gpio");
+				if (ret < 0) {
+					dev_err(&pdev->dev, "gpio req failed for hub reset\n");
+					goto remove_phy;
+				}
+				gpio_direction_output(
+					motg->pdata->hub_reset_gpio, 1);
+
+			if (gpio_is_valid(motg->pdata->switch_sel_gpio)) {
+				ret = devm_gpio_request(&pdev->dev,
+						motg->pdata->switch_sel_gpio,
+						"qcom,sw-sel-gpio");
+				if (ret < 0) {
+					dev_err(&pdev->dev, "gpio req failed for switch sel\n");
+					goto remove_phy;
+				}
+				if (gpio_get_value(motg->pdata->usb_id_gpio))
+					gpio_direction_input(
+						motg->pdata->switch_sel_gpio);
+
+				else
+					gpio_direction_output(
+					    motg->pdata->switch_sel_gpio,
+					    1);
+			}
+
 			/* usb_id_gpio to irq */
 			id_irq = gpio_to_irq(motg->pdata->usb_id_gpio);
 			motg->ext_id_irq = id_irq;

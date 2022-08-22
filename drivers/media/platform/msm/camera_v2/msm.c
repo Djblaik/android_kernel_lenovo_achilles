@@ -191,23 +191,20 @@ static inline int __msm_queue_find_command_ack_q(void *d1, void *d2)
 
 static void msm_pm_qos_add_request(void)
 {
-    //pr_info("%s: add request",__func__);
-	pr_debug("%s: add request",__func__);
+    pr_info("%s: add request",__func__);
     pm_qos_add_request(&msm_v4l2_pm_qos_request, PM_QOS_CPU_DMA_LATENCY,
         PM_QOS_DEFAULT_VALUE);
 }
 
 static void msm_pm_qos_remove_request(void)
 {
-    //pr_info("%s: remove request",__func__);
-	pr_debug("%s: remove request",__func__);
+    pr_info("%s: remove request",__func__);
     pm_qos_remove_request(&msm_v4l2_pm_qos_request);
 }
 
 void msm_pm_qos_update_request(int val)
 {
-    //pr_info("%s: update request %d",__func__,val);
-	pr_debug("%s: update request %d",__func__,val);
+    pr_info("%s: update request %d",__func__,val);
     pm_qos_update_request(&msm_v4l2_pm_qos_request, val);
 }
 
@@ -392,6 +389,7 @@ int msm_create_session(unsigned int session_id, struct video_device *vdev)
 	msm_init_queue(&session->stream_q);
 	msm_enqueue(msm_session_q, &session->list);
 	mutex_init(&session->lock);
+	mutex_init(&session->lock_q);
 	return 0;
 }
 
@@ -549,6 +547,7 @@ int msm_destroy_session(unsigned int session_id)
 	msm_destroy_session_streams(session);
 	msm_remove_session_cmd_ack_q(session);
 	mutex_destroy(&session->lock);
+	mutex_destroy(&session->lock_q);
 	msm_delete_entry(msm_session_q, struct msm_session,
 		list, session);
 	buf_mgr_subdev = msm_buf_mngr_get_subdev();

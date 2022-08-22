@@ -230,6 +230,10 @@ static const char fsg_string_interface[] = "Mass Storage";
 
 #include "storage_common.c"
 
+/*add byshenxinyu for cdrom_name begin 20160225*/
+static char cdrom_name[]="Lenovo  Phone CDROM";
+static char tfcard_name[]="Lenovo  Phone TFcard";
+/*add byshenxinyu for cdrom_name end 20160225*/
 #ifdef CONFIG_USB_CSW_HACK
 static int write_error_after_csw_sent;
 static int must_report_residue;
@@ -355,70 +359,6 @@ struct fsg_dev {
 	struct usb_ep		*bulk_out;
 };
 
-//added by litao for cdrom read toc of mac os 2015-04-01 begin
-/* usbsdms_read_toc_data1 rsp packet */
-static u8 usbsdms_read_toc_data1[] =
-{
-    0x00,0x0A,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x02,0x00
-};
-
-/* usbsdms_read_toc_data1_format0000 rsp packet */
-static  u8 usbsdms_read_toc_data1_format0000[] =
-{
-    0x00,0x12,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x00,0x00,
-    0x00,0x14,0xAA,0x00,0x00,0x00,0xFF,0xFF /* the last four bytes:32MB */
-};
-
-/* usbsdms_read_toc_data1_format0001 rsp packet */
-static u8 usbsdms_read_toc_data1_format0001[] =
-{
-    0x00,0x0A,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x00,0x00
-};
-
-/* usbsdms_read_toc_data2 rsp packet */
-static u8 usbsdms_read_toc_data2[] =
-{
-    0x00,0x2e,0x01,0x01,
-    0x01,0x14,0x00,0xa0,0x00,0x00,0x00,0x00,0x01,0x00,0x00,
-    0x01,0x14,0x00,0xa1,0x00,0x00,0x00,0x00,0x01,0x00,0x00,
-    0x01,0x14,0x00,0xa2,0x00,0x00,0x00,0x00,0x06,0x00,0x3c,
-                                         /* ^ CDROM size from this byte */
-    0x01,0x14,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x02,0x00
-};
-
-/* usbsdms_read_toc_data3 rsp packet */
-static u8 usbsdms_read_toc_data3[] =
-{
-    0x00,0x12,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x02,0x00,
-    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-};
-
-/* READ_TOC command structure */
-typedef struct _usbsdms_read_toc_cmd_type
-{
-   u8  op_code;
-   u8  msf;             /* bit1 is MSF, 0: address format is LBA form
-                                        1: address format is MSF form */
-   u8  format;          /* bit3~bit0,   MSF Field   Track/Session Number
-                           0000b:       Valid       Valid as a Track Number
-                           0001b:       Valid       Ignored by Drive
-                           0010b:       Ignored     Valid as a Session Number
-                           0011b~0101b: Ignored     Ignored by Drive
-                           0110b~1111b: Reserved
-                        */
-   u8  reserved1;
-   u8  reserved2;
-   u8  reserved3;
-   u8  session_num;     /* a specific session or a track */
-   u8  allocation_length_msb;
-   u8  allocation_length_lsb;
-   u8  control;
-} usbsdms_read_toc_cmd_type;
-//added by litao for cdrom read toc of mac os 2015-04-01 end
 static inline int __fsg_is_set(struct fsg_common *common,
 			       const char *func, unsigned line)
 {
@@ -572,8 +512,6 @@ static void bulk_out_complete(struct usb_ep *ep, struct usb_request *req)
 	spin_unlock(&common->lock);
 }
 
-extern int yep_mass_flag; /*added by Devine for usb mass_storage sd-card flag ql_1000 2014/2/8*/
-
 static int fsg_setup(struct usb_function *f,
 		     const struct usb_ctrlrequest *ctrl)
 {
@@ -620,21 +558,7 @@ static int fsg_setup(struct usb_function *f,
 				w_length != 1)
 			return -EDOM;
 		VDBG(fsg, "get max LUN\n");
-		printk(KERN_ERR"fsg_setup___ fsg->common->nluns:%d\n", fsg->common->nluns);
-		/*added by Devine for usb mass_storage sd-card flag ql_1000 2014/2/8*/
-		if(yep_mass_flag == 1)
-		{
-		*(u8 *)req->buf = fsg->common->nluns - 2;
-		}
-		else if(yep_mass_flag == 2)
-		{
 		*(u8 *)req->buf = fsg->common->nluns - 1;
-		}
-		else
-		{
-		*(u8 *)req->buf = fsg->common->nluns - 0;
-		}			
-		/*added by Devine for usb mass_storage sd-card flag ql_1000 2014/2/8*/
 
 		/* Respond with data/status */
 		req->length = min((u16)1, w_length);
@@ -1387,77 +1311,32 @@ static int do_read_header(struct fsg_common *common, struct fsg_buffhd *bh)
 	return 8;
 }
 
-//modified by litao for cdrom read toc of mac os 2015-04-01 begin
-/* ------------------------------------------------------------
- * function      : static int do_read_toc(struct fsg_dev *fsg, struct fsg_buffhd *bh)
- * description   : response for command READ TOC
- * input         : struct fsg_dev *fsg, struct fsg_buffhd *bh
- * output        : none
- * return        : response data length
- * -------------------------------------------------------------
- */
 static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 {
-    u8    *buf = (u8 *) bh->buf;
-    usbsdms_read_toc_cmd_type *read_toc_cmd = NULL;
-    unsigned long response_length = 0;
-    u8 *response_ptr = NULL;
+	struct fsg_lun	*curlun = common->curlun;
+	int		msf = common->cmnd[1] & 0x02;
+	int		start_track = common->cmnd[6];
+	u8		*buf = (u8 *)bh->buf;
 
-    read_toc_cmd = (usbsdms_read_toc_cmd_type *)common->cmnd;
+	if ((common->cmnd[1] & ~0x02) != 0 ||	/* Mask away MSF */
+			start_track > 1) {
+		curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
+		return -EINVAL;
+	}
 
-    /* When TIME is set to one, the address fields in some returned
-     * data formats shall be in TIME form.
-	 * 2 is time form mask.
-     */
-    if ( 2 == read_toc_cmd->msf )
-    {
-        response_ptr = usbsdms_read_toc_data2;
-        response_length = sizeof(usbsdms_read_toc_data2);
-    }
-    else if(0 != read_toc_cmd->allocation_length_msb)
-    {
-        response_ptr = usbsdms_read_toc_data3;
-        response_length = sizeof(usbsdms_read_toc_data3);
-    }
-    else
-    {
-        /* When TIME is set to zero, the address fields in some returned
-         * data formats shall be in LBA form.
-         */
-        if(0 == read_toc_cmd->format)
-        {
-            /* 0 is mean to valid as a Track Number */
-            response_ptr = usbsdms_read_toc_data1_format0000;
-            response_length = sizeof(usbsdms_read_toc_data1_format0000);
-        }
-        else if(1 == read_toc_cmd->format)
-        {
-            /* 1 is mean to ignored by Logical Unit */
-            response_ptr = usbsdms_read_toc_data1_format0001;
-            response_length = sizeof(usbsdms_read_toc_data1_format0001);
-        }
-        else
-        {
-            /* Valid as a Session Number */
-            response_ptr = usbsdms_read_toc_data1;
-            response_length = sizeof(usbsdms_read_toc_data1);
-        }
-    }
+	memset(buf, 0, 20);
+	buf[1] = (20-2);		/* TOC data length */
+	buf[2] = 1;			/* First track number */
+	buf[3] = 1;			/* Last track number */
+	buf[5] = 0x16;			/* Data track, copying allowed */
+	buf[6] = 0x01;			/* Only track is number 1 */
+	store_cdrom_address(&buf[8], msf, 0);
 
-    memcpy(buf, response_ptr, response_length);
-
-    if(response_length < common->data_size_from_cmnd)
-    {
-        common->data_size_from_cmnd =response_length;
-    }
-
-    common->data_size = common->data_size_from_cmnd;
-
-    common->residue = common->usb_amount_left = common->data_size;
-
-    return response_length;
+	buf[13] = 0x16;			/* Lead-out track is data */
+	buf[14] = 0xAA;			/* Lead-out track number */
+	store_cdrom_address(&buf[16], msf, curlun->num_sectors);
+	return 20;
 }
-//modified by litao for cdrom read toc of mac os 2015-04-01 end
 
 static int do_mode_sense(struct fsg_common *common, struct fsg_buffhd *bh)
 {
@@ -1506,12 +1385,9 @@ static int do_mode_sense(struct fsg_common *common, struct fsg_buffhd *bh)
 	 * The mode pages, in numerical order.  The only page we support
 	 * is the Caching page.
 	 */
-//modified by litao for cdrom read toc of mac os 2015-04-01 begin
-//	if (page_code == 0x08 || all_pages) {
-	if (1) {
+	if (page_code == 0x08 || all_pages) {
 		valid_page = 1;
-		buf[0] = page_code;		/* Page code */
-//modified by litao for cdrom read toc of mac os 2015-04-01 end
+		buf[0] = 0x08;		/* Page code */
 		buf[1] = 10;		/* Page length */
 		memset(buf+2, 0, 10);	/* None of the fields are changeable */
 
@@ -1937,9 +1813,7 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 			 enum data_direction data_dir, unsigned int mask,
 			 int needs_medium, const char *name)
 {
-//modified by litao for cdrom read toc of mac os 2015-04-01 begin
-//	int			i;
-//modified by litao for cdrom read toc of mac os 2015-04-01 end
+	int			i;
 	unsigned int		lun = common->cmnd[1] >> 5;
 	static const char	dirletter[4] = {'u', 'o', 'i', 'n'};
 	char			hdlen[20];
@@ -2044,8 +1918,6 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 	}
 
 	/* Check that only command bytes listed in the mask are non-zero */
-//modified by litao for cdrom read toc of mac os 2015-04-01 begin
-#if 0
 	common->cmnd[1] &= 0x1f;			/* Mask away the LUN */
 	for (i = 1; i < cmnd_size; ++i) {
 		if (common->cmnd[i] && !(mask & (1 << i))) {
@@ -2054,8 +1926,7 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 			return -EINVAL;
 		}
 	}
-#endif
-//modified by litao for cdrom read toc of mac os 2015-04-01 end
+
 	/* If the medium isn't mounted and the command needs to access
 	 * it, return an error. */
 	if (curlun && !fsg_lun_is_open(curlun) && needs_medium) {
@@ -2225,9 +2096,7 @@ static int do_scsi_command(struct fsg_common *common)
 		reply = check_command(common, 10, DATA_DIR_TO_HOST,
 				      (7<<6) | (1<<1), 1,
 				      "READ TOC");
-//modified by litao for cdrom read toc of mac os 2015-04-01 begin
-		if (1)
-//modified by litao for cdrom read toc of mac os 2015-04-01 end
+		if (reply == 0)
 			reply = do_read_toc(common, bh);
 		break;
 
@@ -2884,6 +2753,7 @@ static int fsg_main_thread(void *common_)
 static DEVICE_ATTR(ro, 0644, fsg_show_ro, fsg_store_ro);
 static DEVICE_ATTR(nofua, 0644, fsg_show_nofua, fsg_store_nofua);
 static DEVICE_ATTR(file, 0644, fsg_show_file, fsg_store_file);
+static DEVICE_ATTR(cdrom, 0644, fsg_show_cdrom, fsg_store_cdrom);
 
 static struct device_attribute dev_attr_ro_cdrom =
 	__ATTR(ro, 0444, fsg_show_ro, NULL);
@@ -2972,6 +2842,9 @@ static int create_lun_device(struct fsg_common *common,
 		if (rc)
 			goto error_luns;
 
+		rc = device_create_file(&curlun->dev, &dev_attr_cdrom);
+		if (rc)
+			goto error_luns;
 #ifdef CONFIG_USB_MSC_PROFILING
 		rc = device_create_file(&curlun->dev, &dev_attr_perf);
 		if (rc)
@@ -3084,14 +2957,13 @@ buffhds_first_it:
 
 	/* Prepare inquiryString */
 	i = get_default_bcdDevice();
-	snprintf(common->inquiry_string, sizeof common->inquiry_string,
-		 "%-8s%-16s%04x", cfg->vendor_name ?: "Linux",
-		 /* Assume product name dependent on the first LUN */
-		 cfg->product_name ?: (common->luns->cdrom
-				     ? "File-Stor Gadget"
-				     : "File-CD Gadget"),
-		 i);
-
+	/*mod by shenxinyu for cdrom_name begin 20160225*/
+		if(cfg->product_name){
+		snprintf(common->inquiry_string, sizeof common->inquiry_string,tfcard_name);
+	}else{
+		snprintf(common->inquiry_string, sizeof common->inquiry_string,cdrom_name);
+	}
+      /*mod by shenxinyu for cdrom_name end 20160225*/
 	/*
 	 * Some peripheral controllers are known not to be able to
 	 * halt bulk endpoints correctly.  If one of them is present,
@@ -3172,6 +3044,7 @@ static void fsg_common_release(struct kref *ref)
 #ifdef CONFIG_USB_MSC_PROFILING
 			device_remove_file(&lun->dev, &dev_attr_perf);
 #endif
+			device_remove_file(&lun->dev, &dev_attr_cdrom);
 			device_remove_file(&lun->dev, &dev_attr_nofua);
 			device_remove_file(&lun->dev,
 					   lun->cdrom

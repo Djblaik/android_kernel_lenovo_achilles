@@ -259,7 +259,7 @@ int qpnp_pon_set_restart_reason(enum pon_restart_reason reason)
 		return 0;
 
 	rc = qpnp_pon_masked_write(pon, QPNP_PON_SOFT_RB_SPARE(pon->base),
-					PON_MASK(7, 5), (reason << 5));
+					PON_MASK(7, 2), (reason << 2));
 	if (rc)
 		dev_err(&pon->spmi->dev,
 				"Unable to write to addr=%x, rc(%d)\n",
@@ -592,9 +592,6 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 
 	pr_debug("PMIC input: code=%d, sts=0x%hhx\n",
 					cfg->key_code, pon_rt_sts);
-//add by litao begin
-	pr_err("input_report_key key_code=%d key_value=%d\n", cfg->key_code, pon_rt_sts & pon_rt_bit);
-//add by litao end
 	key_status = pon_rt_sts & pon_rt_bit;
 
 	/* simulate press event in case release event occured

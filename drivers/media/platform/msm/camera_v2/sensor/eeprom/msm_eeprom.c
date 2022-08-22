@@ -24,7 +24,13 @@
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 //Add begin Devine for detect qtech and ofilm hi545 module 20150609
 #ifdef GET_OTP_ID
-#define group_flag 0x40
+/*Modified by zhangxin for otp id get failed of 2nd or 3rd calibration module, A650X-M,SW00188788, 2016-07-06, Begin*/
+#define group_flag_0 0x40
+#define group_flag_1 0xD0
+#define group_flag_2 0xF4
+#define group_offset 16
+#define base_flag_num 1
+/*Modified by zhangxin for otp id get failed of 2nd or 3rd calibration module, A650X-M,SW00188788, 2016-07-06, End*/
 uint16_t  otp_id;
 #endif
 //Add end Devine for detect qtech and ofilm hi545 module 20150609
@@ -272,13 +278,13 @@ static int custom_hynix_define_otp_read(struct msm_eeprom_ctrl_t  *e_ctrl, struc
 {
 	int m = 0;
 	int k = 0;
-	uint32_t addr = 0;		
-	int rc =0;	
+	uint32_t addr = 0;
+	int rc =0;
 //initial  sensor
 	for (m = 0 ; m<sizeof(init_reg_array0)/(sizeof(init_reg_array0[0])) ; m++){
-		rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(&(e_ctrl->i2c_client), 
+		rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(&(e_ctrl->i2c_client),
 				init_reg_array0[m].reg_addr, init_reg_array0[m].reg_data, MSM_CAMERA_I2C_WORD_DATA);
-		
+
 		if (rc < 0) {
 			pr_err("%s: init  failed\n", __func__);
 			return rc;
@@ -286,10 +292,10 @@ static int custom_hynix_define_otp_read(struct msm_eeprom_ctrl_t  *e_ctrl, struc
 	}
 // set to otp mode
 	for(m = 0 ; m < sizeof(init_otp_array)/sizeof(init_otp_array[0]) ; m++){
-		rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(&(e_ctrl->i2c_client), 
+		rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(&(e_ctrl->i2c_client),
 				init_otp_array[m].reg_addr, init_otp_array[m].reg_data, MSM_CAMERA_I2C_BYTE_DATA);
 		mdelay(init_otp_array[m].delay);
-		
+
 		if (rc < 0) {
 			pr_err("%s: to otp mode  failed\n", __func__);
 			return rc;
@@ -319,9 +325,9 @@ static int custom_hynix_define_otp_read(struct msm_eeprom_ctrl_t  *e_ctrl, struc
 			return rc;
 		}
 	}
-	
-	return rc;	
-			
+
+	return rc;
+
 }
 //End add by yangyongfeng for ql800 eeprom 20141113
 
@@ -678,7 +684,6 @@ static int msm_eeprom_cmm_dts(struct msm_eeprom_board_info *eb_info,
 	cmm_data->cmm_support =
 		of_property_read_bool(of_node, "qcom,cmm-data-support");
 	if (!cmm_data->cmm_support)
-		pr_err("%s failed %d  qcom,cmm-data-support\n", __func__, __LINE__);
 		return -EINVAL;
 	cmm_data->cmm_compression =
 		of_property_read_bool(of_node, "qcom,cmm-data-compressed");
@@ -925,12 +930,6 @@ static int eeprom_config_read_cal_data32(struct msm_eeprom_ctrl_t *e_ctrl,
 	rc = copy_to_user(ptr_dest, e_ctrl->cal_data.mapdata,
 		cdata.cfg.read_data.num_bytes);
 
-	/* should only be called once.  free kernel resource */
-	if (!rc) {
-		kfree(e_ctrl->cal_data.mapdata);
-		kfree(e_ctrl->cal_data.map);
-		memset(&e_ctrl->cal_data, 0, sizeof(e_ctrl->cal_data));
-	}
 	return rc;
 }
 
@@ -1317,20 +1316,22 @@ static int msm_eeprom_i2c_probe(struct i2c_client *client,
 			e_ctrl->cal_data.mapdata[j]);
 	//Add begin Devine for detect qtech and ofilm hi545 module 20150610
 	#ifdef GET_OTP_ID
-	if (e_ctrl->cal_data.mapdata[0] == group_flag)
-		{
-               	otp_id = e_ctrl->cal_data.mapdata[1];
-	       }else if (e_ctrl->cal_data.mapdata[17] == group_flag)
-	       {
-	       	otp_id = e_ctrl->cal_data.mapdata[18];
-	       }else if (e_ctrl->cal_data.mapdata[34] == group_flag)
-	       {
-			otp_id = e_ctrl->cal_data.mapdata[35];
-		}
-		else{
-			otp_id = -1;
-		}
-	printk("Devine : otp_id = 0x%X\n",otp_id);
+      /*Modified by zhangxin for otp id get failed of 2nd or 3rd calibration module, A650X-M,SW00188788, 2016-07-06, Begin*/
+       if(((e_ctrl->cal_data.mapdata[0]<<4)&0xc0) == 0x40){
+           otp_id = e_ctrl->cal_data.mapdata[base_flag_num +(group_offset*2)];
+           printk("get group index 2\n");
+       }else if(((e_ctrl->cal_data.mapdata[0]<<2)&0xc0) == 0x40){
+           otp_id = e_ctrl->cal_data.mapdata[base_flag_num +(group_offset*1)];
+           printk("get group index 1\n");
+       }else if((e_ctrl->cal_data.mapdata[0]&0xc0) == 0x40){
+           otp_id = e_ctrl->cal_data.mapdata[base_flag_num +(group_offset*0)];
+           printk("get group index 0\n");
+       }else{
+           otp_id = -1;
+           printk("get group failed\n");
+       }
+       printk("Devine : otp_id = 0x%X\n",otp_id);
+       /*Modified by zhangxin for otp id get failed of 2nd or 3rd calibration module, A650X-M,SW00188788, 2016-07-06, End*/
 	#endif
 	//Add end Devine for detect qtech and ofilm hi545 module 20150610
 	e_ctrl->is_supported |= msm_eeprom_match_crc(&e_ctrl->cal_data);

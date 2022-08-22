@@ -63,15 +63,7 @@ enum msm_sensor_power_seq_type_t {
 	SENSOR_I2C_MUX,
 	SENSOR_I2C,
 };
-/*Added Begin: by hanjianfeng  for camera power control 20140808*/
-enum cam_powerdown_mode_t{
-        POWERDOWN_DEFAULT,
-        POWERDOWN_SENSOR_SOFTWARE,
-        POWERDOWN_AF_SOFTWARE,
-        POWERDOWN_ALL_SOFTWARE,
-        POWERDOWN_INVALID,
-};
-/*Added End: by hanjianfeng  for camera power control 20140808*/
+
 enum msm_camera_qup_i2c_write_batch_size_t {
 	MSM_CAMERA_I2C_BATCH_SIZE_1 = 1,
 	MSM_CAMERA_I2C_BATCH_SIZE_2,
@@ -190,6 +182,12 @@ enum msm_flash_cfg_type_t {
 	CFG_FLASH_HIGH,
 };
 
+enum msm_sensor_output_format_t {
+	MSM_SENSOR_BAYER,
+	MSM_SENSOR_YCBCR,
+	MSM_SENSOR_META,
+};
+
 struct msm_sensor_power_setting {
 	enum msm_sensor_power_seq_type_t seq_type;
 	uint16_t seq_val;
@@ -236,11 +234,11 @@ struct msm_camera_sensor_slave_info {
 	uint8_t  is_init_params_valid;
 	struct msm_sensor_init_params sensor_init_params;
 	uint8_t is_flash_supported;
+	enum msm_sensor_output_format_t output_format;
 	// added by yangze for camera hardware info and camera gpio id (ql1001) 2014-06-10 begin
 	char sensor_module_info[64];
 	uint8_t sensor_gpio_id;
-	// added by yangze for camera hardware info and camera gpio id (ql1001) 2014-06-10 end 
-	uint8_t power_down_mode;//Add by hanjianfeng for camera power control 20140808
+	// added by yangze for camera hardware info and camera gpio id (ql1001) 2014-06-10 end
 };
 
 struct msm_camera_i2c_reg_array {
@@ -320,6 +318,8 @@ struct region_params_t {
 	*/
 	uint16_t step_bound[2];
 	uint16_t code_per_step;
+	/* qvalue for converting float type numbers to integer format */
+	uint32_t qvalue;
 };
 
 struct reg_settings_t {

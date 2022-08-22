@@ -24,13 +24,8 @@
 #endif
 // added by yangze for camera sensor hardware_info (ql1001) 2014-06-11 end
 /* Logging macro */
-//#define CONFIG_MSMB_CAMERA_DEBUG
 #undef CDBG
-#ifdef CONFIG_MSMB_CAMERA_DEBUG
-#define CDBG(fmt, args...) pr_err(fmt, ##args)
-#else
-#define CDBG(fmt, args...) do { } while (0)
-#endif
+#define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
 #define SENSOR_MAX_MOUNTANGLE (360)
 
@@ -662,6 +657,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_camera_slave_info        *camera_info = NULL;
 
 	unsigned long                        mount_pos = 0;
+	uint32_t                             is_yuv;
 
 	/* Validate input parameters */
 	if (!setting) {
@@ -722,6 +718,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 			setting32.is_init_params_valid;
 		slave_info->sensor_init_params = setting32.sensor_init_params;
 		slave_info->is_flash_supported = setting32.is_flash_supported;
+		slave_info->output_format = setting32.output_format;
 	} else
 #endif
 	{
@@ -885,8 +882,8 @@ int32_t msm_sensor_driver_probe(void *setting,
 		s_ctrl->sensordata->sensor_module_info = slave_info->sensor_module_info;
 	}
 	CDBG("sensor_gpio_id %d\n", slave_info->sensor_gpio_id);
-	s_ctrl->sensordata->sensor_gpio_id = slave_info->sensor_gpio_id;	
-// added by yangze for camera hardware info and camera gpio id (ql1001) 2014-06-10 end 
+	s_ctrl->sensordata->sensor_gpio_id = slave_info->sensor_gpio_id;
+// added by yangze for camera hardware info and camera gpio id (ql1001) 2014-06-10 end
 	s_ctrl->sensordata->ois_name = slave_info->ois_name;
 	/*
 	 * Update eeporm subdevice Id by input eeprom name
@@ -984,9 +981,12 @@ int32_t msm_sensor_driver_probe(void *setting,
 		goto free_camera_info;
 	}
 	/* Update sensor mount angle and position in media entity flag */
-	mount_pos = s_ctrl->sensordata->sensor_info->position << 16;
-	mount_pos = mount_pos | ((s_ctrl->sensordata->sensor_info->
-		sensor_mount_angle / 90) << 8);
+	is_yuv = (slave_info->output_format == MSM_SENSOR_YCBCR) ? 1 : 0;
+	mount_pos = is_yuv << 25 |
+		(s_ctrl->sensordata->sensor_info->position << 16) |
+		((s_ctrl->sensordata->
+		sensor_info->sensor_mount_angle / 90) << 8);
+
 	s_ctrl->msm_sd.sd.entity.flags = mount_pos | MEDIA_ENT_FL_DEFAULT;
 
 	/*Save sensor info*/
@@ -1398,7 +1398,7 @@ static struct i2c_driver msm_sensor_driver_i2c = {
 		/*Added Begin: by hanjianfeng for camera bringup (QW702) 20150209*/
 		.owner = THIS_MODULE,
 		.of_match_table = msm_sensor_driver_dt_match,
-		/*Added End: by hanjianfeng for camera bringup (QW702) 20150209*/			
+		/*Added End: by hanjianfeng for camera bringup (QW702) 20150209*/
 	},
 };
 

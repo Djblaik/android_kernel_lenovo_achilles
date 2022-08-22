@@ -172,7 +172,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(current_now),
 	//aidongdong add for battery id info by 20140804 begin
 	POWER_SUPPLY_ATTR(battery_id),
-	//aidongdong add for battery id info by 20140804 end	
+	//aidongdong add for battery id info by 20140804 end
 	POWER_SUPPLY_ATTR(current_avg),
 	POWER_SUPPLY_ATTR(power_now),
 	POWER_SUPPLY_ATTR(power_avg),

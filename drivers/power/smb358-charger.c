@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
- 
+
 #define pr_fmt(fmt) "SMB358 %s: " fmt, __func__
 #include <linux/i2c.h>
 #include <linux/debugfs.h>
@@ -31,7 +31,7 @@
 /* Modify by lichuangchuang for battery debug (8909) SW00131408 20150619 start */
 #include"couloMeter.h"
 #include <linux/wakelock.h>
-//shihuijun added begin for charger notify 20150814 start 
+//shihuijun added begin for charger notify 20150814 start
 #if defined(CONFIG_CHARGER_NOTIFY)
 #include <linux/charger_notify.h>
 #endif
@@ -43,7 +43,7 @@ static int charging_on = 1;
 //static bool input_current =false;
 static int limit_on = 1;
 //add by shihuijun for AL650x charger cfg  20150814 start
-static int chg_insert_for_tp = 0; 
+static int chg_insert_for_tp = 0;
 #if defined(CONFIG_CHARGER_NOTIFY)
 struct charger_event chg_event;
 #endif
@@ -53,7 +53,7 @@ struct charger_event chg_event;
 #ifdef pr_debug
 #undef pr_debug
 #define pr_debug pr_err
-#endif 
+#endif
 #ifdef dev_dbg
 #undef dev_dbg
 #define dev_dbg dev_err
@@ -273,7 +273,7 @@ struct smb358_charger {
 	bool				runin_on_old;
 	bool				charge_is_lock_now;
 	struct wake_lock	dc_chg_wake_lock;
-	int				temp_or_soc;//temp is -600 to 1000(/10), soc is 1000 to 1100(-1000). 
+	int				temp_or_soc;//temp is -600 to 1000(/10), soc is 1000 to 1100(-1000).
 	int				usb_state_over_voltage;
 	unsigned int		battery_temp_change_time;
 	int				chg_type;
@@ -444,13 +444,14 @@ static int smb358_fastchg_current_set(struct smb358_charger *chip,
 					unsigned int fastchg_current)
 {
 	int i;
-	
+
 	if ((fastchg_current < SMB358_FAST_CHG_MIN_MA) ||
 		(fastchg_current >  SMB358_FAST_CHG_MAX_MA)) {
 		dev_dbg(chip->dev, "bad fastchg current mA=%d asked to set\n",
 						fastchg_current);
 		return -EINVAL;
-	} 
+	}
+
 	for (i = ARRAY_SIZE(fast_chg_current) - 1; i >= 0; i--) {
 		if (fast_chg_current[i] <= fastchg_current)
 			break;
@@ -461,6 +462,7 @@ static int smb358_fastchg_current_set(struct smb358_charger *chip,
 						fastchg_current);
 		i = 0;
 	}
+
 	i = i << SMB358_FAST_CHG_SHIFT;
 	dev_dbg(chip->dev, "fastchg limit=%d setting %02x\n",
 					fastchg_current, i);
@@ -797,6 +799,9 @@ static int smb358_hw_init(struct smb358_charger *chip)
 
 	if (!chip->disable_apsd)
 		reg = CHG_CTRL_APSD_EN_BIT;
+	else
+		reg = 0;
+
 	rc = smb358_masked_write(chip, CHG_CTRL_REG,
 				CHG_CTRL_APSD_EN_MASK, reg);
 	if (rc) {
@@ -905,15 +910,14 @@ static enum power_supply_property smb358_battery_properties[] = {
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	//aidongdong add for battery id info by 20140804 begin	
+	//aidongdong add for battery id info by 20140804 begin
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
 	POWER_SUPPLY_PROP_BATT_INFO_ID,
-	//aidongdong add for battery id info by 20140804 end	
+	//aidongdong add for battery id info by 20140804 end
 	//Modify by xiongzuan for thermal charger (8909)  20150728  begin
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 	//Modify by xiongzuan for thermal charger (8909)  20150728  end
-	
 };
 
 static int smb358_get_prop_batt_status(struct smb358_charger *chip)
@@ -1114,7 +1118,7 @@ static int smb358_set_usb_chg_current(struct smb358_charger *chip,
 		return 0;
 	}
 /* Modify by luohao for charging (8916) SW00000000 20150626 start*/
-	if ((current_ma < USB2_MAX_CURRENT_MA && current_ma != 2) || 
+	if ((current_ma < USB2_MAX_CURRENT_MA && current_ma != 2) ||
 		((chip->chg_type == POWER_SUPPLY_TYPE_USB) && (current_ma > USB2_MAX_CURRENT_MA)))
 		current_ma = USB2_MAX_CURRENT_MA;
 /* Modify by luohao for charging (8916) SW00000000 20150626 end*/
@@ -1139,7 +1143,6 @@ static int smb358_set_usb_chg_current(struct smb358_charger *chip,
 			if (chg_current[i] <= current_ma)
 				break;
 		}
-		
 		if (i < 0) {
 			dev_err(chip->dev, "Cannot find %dmA\n", current_ma);
 			i = 0;
@@ -1182,12 +1185,12 @@ static int smb358_system_temp_level_set(struct smb358_charger *chip,
 {
 	int rc = 0;
 	int prev_therm_lvl;
-     
+
 	if (!chip->thermal_mitigation) {
 		pr_err("Thermal mitigation not supported\n");
 		return -EINVAL;
 	}
-	
+
 	if (lvl_sel < 0) {
 		pr_err("Unsupported level selected %d\n", lvl_sel);
 		return -EINVAL;
@@ -1237,7 +1240,6 @@ smb358_batt_property_is_writeable(struct power_supply *psy,
 
 	return 0;
 }
-//Modify by xiongzuan for thermal charger (8909)  20150728  end
 
 static int bound_soc(int soc)
 {
@@ -1349,16 +1351,10 @@ static int smb358_battery_get_property(struct power_supply *psy,
 		val->strval = "SMB358";
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150615 start */
 		val->intval = smb358_get_prop_batt_temp(chip);
-		//val->intval = cm_get_Temperature() * 10;
-		/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150615 end */
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150615 start */
 		val->intval = smb358_get_prop_battery_voltage_now(chip);
-		//val->intval = cm_get_Voltage() * 1000;
-		/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150615 end */
 		break;
 	//aidongdong add for battery id info by 20140804 begin
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
@@ -1384,10 +1380,11 @@ static int smb358_battery_get_property(struct power_supply *psy,
 	}
 	return 0;
 }
+
 /* Add by lichuangchuang for can not resume phone when remove usb or ac (8909) SW00000000 20150812 start*/
 static bool is_wake_lock_init = false;
-static void qpnp_charge_wake_lock_work(struct smb358_charger *chip) 
-{	
+static void qpnp_charge_wake_lock_work(struct smb358_charger *chip)
+{
 	if(is_wake_lock_init == false){
 		/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150812 start */
 		wake_lock_init(&chip->dc_chg_wake_lock, WAKE_LOCK_SUSPEND, "dc_chg_lock");
@@ -1395,28 +1392,28 @@ static void qpnp_charge_wake_lock_work(struct smb358_charger *chip)
 		chip->charge_is_lock_now = false;
 		/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150812 end */
 	}
-	
+
 	if((chip->chg_present == false) && (chip->charge_is_lock_now == true)){
 		chip->charge_is_lock_now = chip->chg_present;
 		pr_err("qpnp_charge_wake_lock_work: %d\n", chip->chg_present);
-/* Add by shihuijun for AL650x charger cfg 20150814 start*/    
-    chg_insert_for_tp = 0;      
+/* Add by shihuijun for AL650x charger cfg 20150814 start*/
+    chg_insert_for_tp = 0;
     #if defined(CONFIG_CHARGER_NOTIFY)
         chg_event.data = &chg_insert_for_tp;
         charger_notifier_call_chain(CHARGER_EVENT_REPORT, &chg_event);
 		#endif
-/* Add by shihuijun for AL650x charger cfg 20150814 end*/    
+/* Add by shihuijun for AL650x charger cfg 20150814 end*/
 		wake_unlock(&chip->dc_chg_wake_lock);
 	}else if((chip->chg_present == true) && (chip->charge_is_lock_now == false)){
 		chip->charge_is_lock_now = chip->chg_present;
 		pr_err("qpnp_charge_wake_lock_work: %d\n", chip->chg_present);
-/* Add by shihuijun for AL650x charger cfg 20150814 start*/    
-    chg_insert_for_tp = 1;      
+/* Add by shihuijun for AL650x charger cfg 20150814 start*/
+    chg_insert_for_tp = 1;
     #if defined(CONFIG_CHARGER_NOTIFY)
         chg_event.data = &chg_insert_for_tp;
         charger_notifier_call_chain(CHARGER_EVENT_REPORT, &chg_event);
 		#endif
-/* Add by shihuijun for AL650x charger cfg 20150814 end*/ 
+/* Add by shihuijun for AL650x charger cfg 20150814 end*/
 		wake_lock(&chip->dc_chg_wake_lock);
 	}
 }
@@ -1473,10 +1470,9 @@ static int apsd_complete(struct smb358_charger *chip, u8 status)
 	}
 
 	chip->chg_present = !!status;
-	
+
 	if(chip->chg_present)
 		qpnp_charge_wake_lock_work(chip);
-	
 	dev_dbg(chip->dev, "APSD complete. USB type detected=%d chg_present=%d",
 						type, chip->chg_present);
 
@@ -1502,7 +1498,7 @@ static int chg_uv(struct smb358_charger *chip, u8 status)
 		//				POWER_SUPPLY_TYPE_USB);
 		power_supply_set_present(chip->usb_psy, chip->chg_present);
 
-		if (chip->bms_controlled_charging)
+		if (chip->bms_controlled_charging) {
 			/*
 			* Disable SOC based USB suspend to enable charging on
 			* USB insertion.
@@ -1510,8 +1506,9 @@ static int chg_uv(struct smb358_charger *chip, u8 status)
 			rc = smb358_charging_disable(chip, SOC, false);
 			if (rc < 0)
 				dev_err(chip->dev,
-					"Couldn't disable usb suspend rc = %d\n",
-									rc);
+				"Couldn't disable usb suspend rc = %d\n",
+								rc);
+		}
 	}
 
 	if (status != 0) {
@@ -1818,7 +1815,6 @@ static void smb_chg_adc_notification(enum qpnp_tm_state state, struct smb358_cha
 	//if (qpnp_adc_tm_channel_measure(chip->adc_tm_dev, &chip->adc_param))
 	//	pr_err("request ADC error\n");
 }
-
 static void monitor_soc_work(struct work_struct *work)
 {
 	//struct delayed_work *dwork = to_delayed_work(work);
@@ -1832,7 +1828,6 @@ static void monitor_soc_work(struct work_struct *work)
 	int available_capacity = cm_get_NominalAvailableCapacity();
 	bool power_supply_need_change = false;
 	//bool charging;
-	
 	mutex_lock(&chip->last_soc_mutex);
 	if(chip->batt_warm && chip->chg_present && (smb358_get_prop_battery_voltage_now(chip) > 4075000)){
 		new_soc = 100;
@@ -1854,10 +1849,9 @@ static void monitor_soc_work(struct work_struct *work)
 			chip->available_capacity_full = 10000;
 		}
 	}
-	
 	pr_debug("monitor_soc_work (debug new soc = %d, last soc = %d, batt_temp = %d, available_capacity = %d.) \n", 
 		new_soc, chip->last_soc, batt_temp, available_capacity);
-	
+
 	if(chip->last_soc != new_soc)
 	{
 		pr_err("monitor_soc_work (soc_change new soc = %d, last soc = %d, batt_temp = %d, available_capacity = %d.) \n", 
@@ -1868,10 +1862,10 @@ static void monitor_soc_work(struct work_struct *work)
 			chip->last_soc -= 1;
 		power_supply_need_change = true;
 	}
-	
+
 	if((new_soc == 0) && chip->chg_present)
 		power_supply_need_change = true;
-	
+
 	if(batt_temp < chip->adc_param.low_temp)
 	{
 		smb_chg_adc_notification(ADC_TM_COOL_STATE, chip);
@@ -1890,17 +1884,17 @@ static void monitor_soc_work(struct work_struct *work)
 			pr_err("monitor_soc_work (batt temp is high !!!)\n");
 		}
 	}
-	
+
 	if (batt_temp > chip->hot_bat_decidegc + 100){
 		power_supply_need_change = true;
 	}
-	
+
 	if(chip->battery_temp_change_time > 180000){
 		power_supply_need_change = true;
 	}else {
 		chip->battery_temp_change_time += chip->worker_time;
 	}
-	
+
 	if(power_supply_need_change == true){
 		chip->battery_temp_change_time = 0;
 		power_supply_changed(&chip->batt_psy);
@@ -1925,13 +1919,21 @@ int msm_chg_usb_runin_switch(struct smb358_charger *chip, uint32_t  on)
 		if(!runin_on){
 			pr_err("monitor_soc_work (runin on, disable charge.) \n");
 			rc = smb358_path_suspend(chip, RUNIN, true);
-			if (rc < 0)
+			/* added by xiongzu'an for runin test fail SW00189221 20160803 begin */
+			if (rc < 0){
+				chip->runin_on_old = 1;
 				dev_err(chip->dev, "Couldn't suspend rc = %d\n", rc);
+			}
+			/* added by xiongzu'an for runin test fail SW00189221 20160803 end */
 		}else{
 			pr_err("monitor_soc_work (runin off, enable charge.) \n");
 			rc = smb358_path_suspend(chip, RUNIN, false);
-			if (rc < 0)
+			/* added by xiongzu'an for runin test fail SW00189221 20160803 begin */
+			if (rc < 0){
+				chip->runin_on_old = 0;
 				dev_err(chip->dev, "Couldn't set susp rc = %d\n", rc);
+			}
+			/* added by xiongzu'an for runin test fail SW00189221 20160803 end */
 		}
 	}
 	pr_err("runin_on =%d \n",runin_on);
@@ -2385,7 +2387,8 @@ static void smb358_external_power_changed(struct power_supply *psy)
 			"Couldn't read USB current_max property, rc=%d\n", rc);
 	else
 		current_limit = prop.intval / 1000;
-		
+
+
 	smb358_enable_volatile_writes(chip);
 	smb358_set_usb_chg_current(chip, current_limit);
 
@@ -2757,7 +2760,7 @@ static int smb_parse_dt(struct smb358_charger *chip)
 			return rc;
 		}
 	}
-	//Modify by xiongzuan for thermal charger (8909)  20150728  end 
+	//Modify by xiongzuan for thermal charger (8909)  20150728  end
 
 	pr_debug("inhibit-disabled = %d, recharge-disabled = %d, recharge-mv = %d,",
 		chip->inhibit_disabled, chip->recharge_disabled,
@@ -2839,7 +2842,7 @@ static int64_t read_battery_id(struct smb358_charger *chip)
 		pr_err("error reading batt id channel = %d, rc = %d\n",
 			LR_MUX2_BAT_ID, rc);
 		return rc;
-	}	
+	}
 	return result.physical;
 }
 /* Modify by lichuangchuang for battery debug (8909) SW00131408 20150531 end */
@@ -3091,7 +3094,7 @@ static int smb358_charger_probe(struct i2c_client *client,
 		smb358_chg_valid_handler(irq, chip);
 		enable_irq_wake(irq);
 	}
-	
+
 	chip->irq_gpio = of_get_named_gpio_flags(chip->dev->of_node,
 				"qcom,irq-gpio", 0, NULL);
 
@@ -3172,7 +3175,7 @@ static int smb358_charger_probe(struct i2c_client *client,
 		chip->battery_missing = 1;
 		g_power_is_couloMeter = 0;
 	}
-	
+
 	chip->last_soc = smb358_get_prop_batt_capacity(chip);
 	chip->adc_param.low_temp = chip->cool_bat_decidegc;
 	chip->adc_param.high_temp = chip->warm_bat_decidegc;
@@ -3237,6 +3240,7 @@ static int smb358_suspend(struct device *dev)
 	struct smb358_charger *chip = i2c_get_clientdata(client);
 	int rc;
 	int i;
+
 	for (i = 0; i < 2; i++) {
 		rc = smb358_read_reg(chip, FAULT_INT_REG + i,
 					&chip->irq_cfg_mask[i]);

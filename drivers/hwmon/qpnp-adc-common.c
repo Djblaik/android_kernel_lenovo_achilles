@@ -539,7 +539,6 @@ static const struct qpnp_vadc_map_pt adcmap_qrd_skul_btm_threshold[] = {
 };
 
 /* Voltage to temperature */
-/*xiongzuan modify for BTM-table by 20150430 begin*/
 static const struct qpnp_vadc_map_pt adcmap_100k_104ef_104fb[] = {
 	{1758,	-40},
 	{1742,	-35},
@@ -1072,12 +1071,10 @@ static long last_bat_voltage = 0;
 #define WAKE_LOCK_WORK_TIME 3000
 #define CALCULATE_BAT_VOLTAGE_NUM 500
 struct delayed_work		allow_calculate_bat_voltage_work;
-
-static void qpnp_allow_calculate_bat_voltage_work(struct work_struct *work) 
+static void qpnp_allow_calculate_bat_voltage_work(struct work_struct *work)
 {
 	allow_calculate_bat_voltage = true;
 }
-
 int32_t qpnp_adc_scale_qrd_skuh_batt_therm(struct qpnp_vadc_chip *chip,
 		int32_t adc_code,
 		const struct qpnp_adc_properties *adc_properties,
@@ -1088,7 +1085,7 @@ int32_t qpnp_adc_scale_qrd_skuh_batt_therm(struct qpnp_vadc_chip *chip,
 	int i;
 	if(allow_calculate_bat_voltage_work_init == false){
 		allow_calculate_bat_voltage_work_init = true;
-		INIT_DELAYED_WORK(&allow_calculate_bat_voltage_work, 
+		INIT_DELAYED_WORK(&allow_calculate_bat_voltage_work,
 			qpnp_allow_calculate_bat_voltage_work);
 	}
 	if(allow_calculate_bat_voltage == true){
@@ -1096,14 +1093,12 @@ int32_t qpnp_adc_scale_qrd_skuh_batt_therm(struct qpnp_vadc_chip *chip,
 		for(i = 0; i < CALCULATE_BAT_VOLTAGE_NUM; i++){
 			//udelay(100);
 			last_bat_voltage += qpnp_adc_scale_ratiometric_calib(adc_code,
-							adc_properties, chan_properties);
+			adc_properties, chan_properties);
 		}
 		last_bat_voltage /= CALCULATE_BAT_VOLTAGE_NUM;
-		
-		schedule_delayed_work(&allow_calculate_bat_voltage_work, 
+		schedule_delayed_work(&allow_calculate_bat_voltage_work,
 			msecs_to_jiffies(WAKE_LOCK_WORK_TIME));
 	}
-
 	return qpnp_adc_map_temp_voltage(
 			adcmap_qrd_skuh_btm_threshold,
 			ARRAY_SIZE(adcmap_qrd_skuh_btm_threshold),
@@ -1112,7 +1107,6 @@ int32_t qpnp_adc_scale_qrd_skuh_batt_therm(struct qpnp_vadc_chip *chip,
 }
 EXPORT_SYMBOL(qpnp_adc_scale_qrd_skuh_batt_therm);
 /* Mofify by lichuangchuang for can not resume phone when remove usb or ac (8909) SW00000000 20150618 end*/
-
 
 int32_t qpnp_adc_scale_qrd_skuc_batt_therm(struct qpnp_vadc_chip *chip,
 			int32_t adc_code,

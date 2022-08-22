@@ -241,12 +241,9 @@ static int input_handle_abs_event(struct input_dev *dev,
 	if (pold) {
 		*pval = input_defuzz_abs_event(*pval, *pold,
 						dev->absinfo[code].fuzz);
-//added by litao begin
-		if((code != ABS_X) && (code != ABS_Y) && (code != ABS_Z)){
-			if (*pold == *pval)
-				return INPUT_IGNORE_EVENT;
-		}
-//added by litao end
+		if (*pold == *pval)
+			return INPUT_IGNORE_EVENT;
+
 		*pold = *pval;
 	}
 

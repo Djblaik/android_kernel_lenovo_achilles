@@ -116,8 +116,7 @@ void mmc_fixup_device(struct mmc_card *card, const struct mmc_fixup *table)
 	for (f = table; f->vendor_fixup; f++) {
 		if ((f->manfid == CID_MANFID_ANY ||
 		     f->manfid == card->cid.manfid) &&
-			/*deleted by liumx for hynix emmc 20150702 start*/
-		    /*(f->oemid == CID_OEMID_ANY ||
+		    (f->oemid == CID_OEMID_ANY ||
 		     f->oemid == card->cid.oemid) &&
 		    (f->name == CID_NAME_ANY ||
 		     !strncmp(f->name, card->cid.prod_name,
@@ -127,8 +126,7 @@ void mmc_fixup_device(struct mmc_card *card, const struct mmc_fixup *table)
 		    (f->cis_vendor == card->cis.vendor ||
 		     f->cis_vendor == (u16) SDIO_ANY_ID) &&
 		    (f->cis_device == card->cis.device ||
-		     f->cis_device == (u16) SDIO_ANY_ID) &&*/
-			/*deleted by liumx for hynix emmc 20150702 end*/
+		     f->cis_device == (u16) SDIO_ANY_ID) &&
 		    rev >= f->rev_start && rev <= f->rev_end) {
 			dev_dbg(&card->dev, "calling %pF\n", f->vendor_fixup);
 			f->vendor_fixup(card, f->data);

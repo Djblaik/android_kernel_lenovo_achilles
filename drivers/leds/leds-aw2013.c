@@ -215,6 +215,7 @@ static void aw2013_brightness_work(struct work_struct *work)
 			return;
 		}
 	}
+
 	if (led->cdev.brightness > 0) {
 		if (led->cdev.brightness > led->cdev.max_brightness)
 			led->cdev.brightness = led->cdev.max_brightness;
@@ -226,9 +227,7 @@ static void aw2013_brightness_work(struct work_struct *work)
 			led->cdev.brightness);
 		aw2013_read(led, AW_REG_LED_ENABLE, &val);
 		aw2013_write(led, AW_REG_LED_ENABLE, val | (1 << led->id));
-		printk("aw2013 led%d brightness=%d,current=%d\n",val | (1 << led->id),led->cdev.brightness,led->pdata->max_current);
 	} else {
-		printk("aw2013 led%d brightness=%d\n",val | (1 << led->id),led->cdev.brightness);		
 		aw2013_read(led, AW_REG_LED_ENABLE, &val);
 		aw2013_write(led, AW_REG_LED_ENABLE, val & (~(1 << led->id)));
 	}

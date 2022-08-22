@@ -127,18 +127,14 @@ static struct sensors_classdev sensors_cdev = {
 	.max_range = "1228.8",
 	.resolution = "0.6",
 	.sensor_power = "0.35",
-	.min_delay = 0,
+	.min_delay = 10000,
 	.max_delay = 10000,
 	.fifo_reserved_event_count = 0,
 	.fifo_max_event_count = 0,
-	.flags = 0,
 	.enabled = 0,
 	.delay_msec = 10,
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
-	.sensors_calibrate = NULL,
-	.sensors_write_cal_params = NULL,
-	.params = NULL,
 };
 
 static struct akm_compass_data *s_akm;

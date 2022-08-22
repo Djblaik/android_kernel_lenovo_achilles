@@ -10,6 +10,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/bitops.h>
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
@@ -25,7 +26,7 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
-/* Added by yanwenlong for increase flash hardware_info (general) 2013.8.29 begin */
+/* Added by wangjiao1 for increase flash hardware_info, SW00184347(AL650X) 20160222, begin */
 #ifdef CONFIG_GET_HARDWARE_INFO
 #include <mach/hardware_info.h>
 static char tmp_flash_name[100];
@@ -34,8 +35,7 @@ static char tmp_flash_name[100];
 #define MCP_MICRON_MANIFACTURE_ID 0x13
 #define MCP_KINGSTON_MANIFACTURE_ID 0x70
 #endif
-/* Added by yanwenlong for increase flash hardware_info (general) 2013.8.29 end */
-
+/* Added by wangjiao1 for increase flash hardware_info, SW00184347(AL650X) 20160222, end */
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -338,13 +338,12 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		}
 	}
 
+	/*
+	 * The EXT_CSD format is meant to be forward compatible. As long
+	 * as CSD_STRUCTURE does not change, all values for EXT_CSD_REV
+	 * are authorized, see JEDEC JESD84-B50 section B.8.
+	 */
 	card->ext_csd.rev = ext_csd[EXT_CSD_REV];
-	if (card->ext_csd.rev > 7) {
-		pr_err("%s: unrecognised EXT_CSD revision %d\n",
-			mmc_hostname(card->host), card->ext_csd.rev);
-		err = -EINVAL;
-		goto out;
-	}
 
 	/* fixup device after ext_csd revision field is updated */
 	mmc_fixup_device(card, mmc_fixups);
@@ -541,15 +540,19 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			card->ext_csd.bkops_en = ext_csd[EXT_CSD_BKOPS_EN];
 			card->ext_csd.raw_bkops_status =
 				ext_csd[EXT_CSD_BKOPS_STATUS];
-			if (!card->ext_csd.bkops_en &&
+			if (!(mmc_card_get_bkops_en_manual(card)) &&
 				card->host->caps2 & MMC_CAP2_INIT_BKOPS) {
-				err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-					EXT_CSD_BKOPS_EN, 1, 0);
-				if (err)
+				mmc_card_set_bkops_en_manual(card);
+				err = mmc_switch(card,
+					EXT_CSD_CMD_SET_NORMAL,
+					EXT_CSD_BKOPS_EN,
+					card->ext_csd.bkops_en , 0);
+				if (err) {
 					pr_warn("%s: Enabling BKOPS failed\n",
 						mmc_hostname(card->host));
-				else
-					card->ext_csd.bkops_en = 1;
+					mmc_card_clr_bkops_en_manual(card);
+				}
+
 			}
 		}
 
@@ -558,6 +561,18 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 		card->ext_csd.rel_param = ext_csd[EXT_CSD_WR_REL_PARAM];
 		card->ext_csd.rst_n_function = ext_csd[EXT_CSD_RST_N_FUNCTION];
+
+		/*
+		 * Some eMMC vendors violate eMMC 5.0 spec and set
+		 * REL_WR_SEC_C register to 0x10 to indicate the
+		 * ability of RPMB throughput improvement thus lead
+		 * to failure when TZ module write data to RPMB
+		 * partition. So check bit[4] of EXT_CSD[166] and
+		 * if it is not set then change value of REL_WR_SEC_C
+		 * to 0x1 directly ignoring value of EXT_CSD[222].
+		 */
+		if (!(card->ext_csd.rel_param & EXT_CSD_WR_REL_PARAM_EN_RPMB))
+			card->ext_csd.rel_sectors = 0x1;
 
 		/*
 		 * RPMB regions are defined in multiples of 128K.
@@ -1499,7 +1514,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			goto free_card;
 		}
 
-        /* Added by yanwenlong to increase emcp hardware info. (general) 2015-01-08 begin */
+/* Added by wangjiao1 for increase flash hardware_info, SW00184347(AL650X) 20160222, begin */
 #if defined(CONFIG_GET_HARDWARE_INFO)
         if(host->index==0)
         {
@@ -1512,8 +1527,21 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
             }
             else if(MCP_SAMSUNG_MANIFACTURE_ID==card->cid.manfid)
             {
-                snprintf(tmp_flash_name, 100, "SAMSUNG: %u MB(EMMC) 1GB(DDR)", card->ext_csd.sectors / 2048);
-                register_hardware_info(EMCP, tmp_flash_name);
+                if(!strncmp(card->cid.prod_name, "Q4Z3MB", 6))
+                {
+                    snprintf(tmp_flash_name, 100, "SAMSUNG: %u MB(EMMC) 2GB(DDR)", card->ext_csd.sectors / 2048);
+                    register_hardware_info(EMCP, tmp_flash_name);
+                }
+                else if(!strncmp(card->cid.prod_name, "F822MB", 6))
+                {
+                    snprintf(tmp_flash_name, 100, "SAMSUNG: %u MB(EMMC) 1GB(DDR)", card->ext_csd.sectors / 2048);
+                    register_hardware_info(EMCP, tmp_flash_name);
+                }
+                else
+                {
+                    snprintf(tmp_flash_name, 100, "SAMSUNG: %u MB(EMMC) 2GB(DDR)", card->ext_csd.sectors / 2048);
+                    register_hardware_info(EMCP, tmp_flash_name);
+                }
             }
             else if(MCP_MICRON_MANIFACTURE_ID==card->cid.manfid)
             {
@@ -1529,10 +1557,10 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
             {
                 snprintf(tmp_flash_name, 100,"%s: %u MB(EMMC) 1GB(DDR)" ,card->cid.prod_name, card->ext_csd.sectors / 2048);
                 register_hardware_info(EMCP, tmp_flash_name);
-            } 
+            }
         }
 #endif
-        /* Added by yanwenlong to increase emcp hardware info. (general) 2015-01-08 end */
+/* Added by wangjiao1 for increase flash hardware_info, SW00184347(AL650X) 20160222, end */
 
 		/* If doing byte addressing, check if required to do sector
 		 * addressing.  Handle the case of <2GB cards needing sector
@@ -1732,8 +1760,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 				goto free_card;
 			}
 		}
-
-		if (card->ext_csd.bkops_en) {
+		if (mmc_card_get_bkops_en_manual(card)) {
 			INIT_DELAYED_WORK(&card->bkops_info.dw,
 					  mmc_start_idle_time_bkops);
 

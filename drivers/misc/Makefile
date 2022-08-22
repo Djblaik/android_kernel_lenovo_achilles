@@ -70,3 +70,8 @@ obj-$(CONFIG_GET_HARDWARE_INFO) += hardware_info.o
 #added by litao end
 obj-$(CONFIG_QCOM_LIQUID_DOCK)	+= qcom_liquid_dock.o
 obj-y				+= qcom/
+#added by zhaochengliang for child mode A6505M-601 20160812 begin
+#added by WantJoin co. ltd
+obj-y                           += wantjoin/
+#added by zhaochengliang for child mode A6505M-601 20160812 end
+obj-$(CONFIG_UID_CPUTIME) 	+= uid_cputime.o

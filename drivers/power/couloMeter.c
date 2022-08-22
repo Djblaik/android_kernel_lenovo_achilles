@@ -70,7 +70,7 @@ static struct i2c_driver CM_i2c_driver = {
 //function
 /**********************************************************
  *
- *   [Global Variable] 
+ *   [Global Variable]
  *
  *********************************************************/
  /* Modify by lichuangchuang for battery debug (8909) SW00131408 20150603 start */
@@ -80,7 +80,7 @@ static struct mutex		cm_i2c_access;
 //static DEFINE_MUTEX(cm_i2c_access);
 /**********************************************************
  *
- *   [I2C Function For Read/Write sn65dsi8x] 
+ *   [I2C Function For Read/Write sn65dsi8x]
  *
  *********************************************************/
 /*static int cm_read_byte(int cmd, int *returnData)
@@ -96,7 +96,7 @@ static struct mutex		cm_i2c_access;
 		LOG_INF("[cm_read_byte] null point exception!!!!!!!\n");
 		return -1;
 	}
-	mutex_lock(&cm_i2c_access); 
+	mutex_lock(&cm_i2c_access);
 	cm_iic_client->ext_flag=((cm_iic_client->ext_flag ) & I2C_MASK_FLAG ) | I2C_WR_FLAG | I2C_DIRECTION_FLAG | I2C_RS_FLAG;
 
 	cmd_buf[0] = cmd;
@@ -104,8 +104,8 @@ static struct mutex		cm_i2c_access;
 	LOG_INF("[cm_read_byte4] cmd=0x%x\n",cmd);
 #endif
 	ret = i2c_master_send(cm_iic_client, &cmd_buf[0], (1<<8 | 1));
-	if (ret < 0) 
-	{    
+	if (ret < 0)
+	{
 		cm_iic_client->ext_flag=0;
 		mutex_unlock(&cm_i2c_access);
 		LOG_INF("[cm_read_byte] iic read failed(%d)\n",ret);
@@ -122,7 +122,7 @@ static struct mutex		cm_i2c_access;
 #endif
 
 	cm_iic_client->ext_flag=0;
-	mutex_unlock(&cm_i2c_access);    
+	mutex_unlock(&cm_i2c_access);
 
 	return ret;
 }
@@ -142,15 +142,15 @@ static int cm_write_byte(int cmd, int writeData)
 #endif
 	cm_iic_client->ext_flag=((cm_iic_client->ext_flag ) & I2C_MASK_FLAG ) | I2C_DIRECTION_FLAG;
 	ret = i2c_master_send(cm_iic_client, write_data, 2);
-	if (ret < 0) 
+	if (ret < 0)
 	{
-		cm_iic_client->ext_flag=0;    
+		cm_iic_client->ext_flag=0;
 		mutex_unlock(&cm_i2c_access);
 
-		return ret;	
+		return ret;
 	}
 
-	cm_iic_client->ext_flag=0;    
+	cm_iic_client->ext_flag=0;
 	mutex_unlock(&cm_i2c_access);
 
 	return ret;
@@ -213,12 +213,12 @@ static int cm_write_byte(int reg, int val)
 */
 /**********************************************************
  *
- *   [coulometer function For Read/Write coulometer] 
+ *   [coulometer function For Read/Write coulometer]
  *
  *********************************************************/
 /**********************************************************
  *[name]      :cm_get_Temperature
- *[return]    :battery temperature in units 0.1k 
+ *[return]    :battery temperature in units 0.1k
  *[desciption]:ret*0.1 -273.5
  *********************************************************/
 int cm_get_Temperature(void)
@@ -253,12 +253,12 @@ int cm_get_Temperature(void)
 #if defined(COULOMETER_DEBUG_LOG)
 	LOG_INF("cm_get_Temperature ret_a=0x%x,ret_b=0x%x,ret=%d\n",ret_a,ret_b,ret);
 #endif
-	return ret;	
+	return ret;
 }
 
 /**********************************************************
  *[name]      :cm_get_Voltage
- *[return]    :unsigned integer value 
+ *[return]    :unsigned integer value
  *[desciption]:the measured cell-pack voltage in mv with a range of 0 to 6000mv
  *********************************************************/
 int cm_get_Voltage(void)
@@ -291,7 +291,7 @@ int cm_get_Voltage(void)
 #if defined(COULOMETER_DEBUG_LOG)
 	LOG_INF("cm_get_Voltage ret_a=0x%x,ret_b=0x%x,ret=%d\n",ret_a,ret_b,ret);
 #endif
-	return ret;	
+	return ret;
 }
 
 /**********************************************************
@@ -361,7 +361,7 @@ int cm_get_RemainingCapacity(void)
 #if defined(COULOMETER_DEBUG_LOG)
 	LOG_INF("cm_get_RemainingCapacity ret_a=0x%x,ret_b=0x%x,ret=%d\n",ret_a,ret_b,ret);
 #endif
-	return ret;	
+	return ret;
 }
 
 /**********************************************************
@@ -396,7 +396,7 @@ int cm_get_FullChargeCapacity(void)
 #if defined(COULOMETER_DEBUG_LOG)
 	LOG_INF("cm_get_FullChargeCapacity ret_a=0x%x,ret_b=0x%x,ret=%d\n",ret_a,ret_b,ret);
 #endif
-	return ret;	
+	return ret;
 }
 
 /**********************************************************
@@ -437,7 +437,7 @@ int cm_get_AverageCurrent(void)
 #if defined(COULOMETER_DEBUG_LOG)
 	LOG_INF("cm_get_AverageCurrent ret_a=0x%x,ret_b=0x%x,ret=%d\n",ret_a,ret_b,ret);
 #endif
-	return ret;	
+	return ret;
 }
 
 /**********************************************************
@@ -472,7 +472,7 @@ int cm_get_AverageTimeToEmpty(void)
 #if defined(COULOMETER_DEBUG_LOG)
 	LOG_INF("cm_get_AverageTimeToEmpty ret_a=0x%x,ret_b=0x%x,ret=%d\n",ret_a,ret_b,ret);
 #endif
-	return ret;	
+	return ret;
 }
 
 /**********************************************************
@@ -507,7 +507,7 @@ int cm_get_AverageTimeToFull(void)
 #if defined(COULOMETER_DEBUG_LOG)
 	LOG_INF("cm_get_AverageTimeToFull ret_a=0x%x,ret_b=0x%x,ret=%d\n",ret_a,ret_b,ret);
 #endif
-	return ret;	
+	return ret;
 }
 
 /**********************************************************
@@ -520,7 +520,7 @@ int cm_get_InternalTemperature(void)
 	int ret = -1,ret_a = 0,ret_b = 0;
 	//int mutex_ret = -1;
 	int count = 0;
-	
+
 	if( 0 == g_power_is_couloMeter )
 		return 25;
 
@@ -639,7 +639,7 @@ EXPORT_SYMBOL_GPL(cm_get_StateOfHealth);
 #endif
 /**********************************************************
  *
- *   [I2C probe For Read/Write coulometer] 
+ *   [I2C probe For Read/Write coulometer]
  *
  *********************************************************/
 static int cm_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
@@ -648,7 +648,7 @@ static int cm_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	/* Modify by lichuangchuang for battery debug (8909) SW00131408 20150531 start */
 	LOG_INF("[CM_i2c_probe]Start\n");
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) 
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 	{
 		printk("%s : need I2C_FUNC_I2C\n", __func__);
 		return  -ENODEV;
@@ -658,10 +658,10 @@ static int cm_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 		LOG_INF("[CM_i2c_probe]err\n");
 		err = -ENOMEM;
 		goto exit;
-	}    
+	}
 	memset(cm_iic_client, 0, sizeof(struct i2c_client));
 
-	cm_iic_client = client;  
+	cm_iic_client = client;
 	//according to datasheet,set Baud Rate is 100k
 	//cm_iic_client->timing = 100;
 /*
@@ -790,12 +790,12 @@ static ssize_t battery_cmd_write(struct file *file, const char *buffer, size_t c
 }
 
 
-static const struct file_operations battery_cmd_proc_fops = { 
+static const struct file_operations battery_cmd_proc_fops = {
 	.read  = battery_cmd_read,
 	.write = battery_cmd_write,
 };
 
-static int mt_couloMeter_probe(struct platform_device *dev)    
+static int mt_couloMeter_probe(struct platform_device *dev)
 {
 	//int ret_device_file = 0;
 	//struct proc_dir_entry *entry = NULL;
@@ -816,8 +816,8 @@ static int mt_couloMeter_probe(struct platform_device *dev)
 #endif
 	}
 #if defined(COULOMETER_DEBUG_LOG)
-	LOG_INF( "******** mtk_battery_cmd!! ********\n" );    
-#endif		
+	LOG_INF( "******** mtk_battery_cmd!! ********\n" );
+#endif
 
 	return 0;
 
@@ -855,7 +855,7 @@ static struct platform_driver mt_couloMeter_driver = {
 static int __init cm_i2C_init(void)
 {
 	int data = 0;
-	
+
 	LOG_INF("couloMeter_i2c_init\n");
 	//i2c_register_board_info(1, &i2c_dev, 1);
 	if(platform_device_register(&g_cm_device)){
@@ -895,7 +895,7 @@ static int __init cm_i2C_init(void)
 	LOG_INF("+++zym+++ i2c_register_board_info(1,$i2c_dev,1)\n");
 
 	LOG_INF("[++++++zym+++++++]{%s} current bat_on voltage value is: (%d|%d)\n", __func__, data,g_power_is_couloMeter);
-	
+
 	return 0;
 }
 

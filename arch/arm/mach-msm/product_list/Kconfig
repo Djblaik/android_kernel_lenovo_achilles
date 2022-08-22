@@ -21,3 +21,11 @@ config PRODUCT_AR6502
         help
           Fix version type as ar6502.
 #========================================================
+
+#========================================================
+config PRODUCT_AR6505
+        depends on ARCH_MSM8909
+        bool "ar6505 product"
+        help
+          Fix version type as ar6505.
+#========================================================

@@ -208,9 +208,9 @@ static int camera_v4l2_reqbufs(struct file *filep, void *fh,
 	session = msm_session_find(session_id);
 	if (WARN_ON(!session))
 		return -EIO;
-	mutex_lock(&session->lock);
+	mutex_lock(&session->lock_q);
 	ret = vb2_reqbufs(&sp->vb2_q, req);
-	mutex_unlock(&session->lock);
+	mutex_unlock(&session->lock_q);
 	return ret;
 }
 
@@ -231,9 +231,9 @@ static int camera_v4l2_qbuf(struct file *filep, void *fh,
 	session = msm_session_find(session_id);
 	if (WARN_ON(!session))
 		return -EIO;
-	mutex_lock(&session->lock);
+	mutex_lock(&session->lock_q);
 	ret = vb2_qbuf(&sp->vb2_q, pb);
-	mutex_unlock(&session->lock);
+	mutex_unlock(&session->lock_q);
 	return ret;
 }
 
@@ -248,9 +248,9 @@ static int camera_v4l2_dqbuf(struct file *filep, void *fh,
 	session = msm_session_find(session_id);
 	if (WARN_ON(!session))
 		return -EIO;
-	mutex_lock(&session->lock);
+	mutex_lock(&session->lock_q);
 	ret = vb2_dqbuf(&sp->vb2_q, pb, filep->f_flags & O_NONBLOCK);
-	mutex_unlock(&session->lock);
+	mutex_unlock(&session->lock_q);
 	return ret;
 }
 
@@ -596,11 +596,7 @@ static int camera_v4l2_open(struct file *filep)
 			goto post_fail;
 		}
 		/* Enable power collapse latency */
-		//msm_pm_qos_update_request(CAMERA_ENABLE_PC_LATENCY);
-		/*add qcom patch for display blue screen by wangjiao1 start */
-		/* Disable power collapse latency 1000*/
-		msm_pm_qos_update_request(CAMERA_DISABLE_PC_LATENCY_2);
-		/*add qcom patch for display blue screen by wangjiao1 end */
+		msm_pm_qos_update_request(CAMERA_ENABLE_PC_LATENCY);
 	} else {
 		rc = msm_create_command_ack_q(pvdev->vdev->num,
 			find_first_zero_bit((const unsigned long *)&opn_idx,
@@ -662,8 +658,6 @@ static int camera_v4l2_close(struct file *filep)
 
 	if (atomic_read(&pvdev->opened) == 0) {
 
-		/* Enable power colapse latency */
-
 		camera_pack_event(filep, MSM_CAMERA_SET_PARM,
 			MSM_CAMERA_PRIV_DEL_STREAM, -1, &event);
 
@@ -679,10 +673,7 @@ static int camera_v4l2_close(struct file *filep)
 		/* This should take care of both normal close
 		 * and application crashes */
 		msm_destroy_session(pvdev->vdev->num);
-		/*add qcom patch for display blue screen by wangjiao1 start */
-				/* Enable power collapse latency */
-				msm_pm_qos_update_request(CAMERA_ENABLE_PC_LATENCY);
-		/*add qcom patch for display blue screen by wangjiao1 start */
+
 		pm_relax(&pvdev->vdev->dev);
 	} else {
 		camera_pack_event(filep, MSM_CAMERA_SET_PARM,

@@ -140,8 +140,6 @@ struct sensors_classdev {
 
 	unsigned int		enabled;
 	unsigned int		delay_msec;
-	//add by yanfei for calibration fuction  20140728 begin
-	unsigned int		pdata;
 	unsigned int		wakeup;
 	unsigned int		max_latency;
 	char			*params;
@@ -151,9 +149,6 @@ struct sensors_classdev {
 					unsigned int enabled);
 	int	(*sensors_poll_delay)(struct sensors_classdev *sensors_cdev,
 					unsigned int delay_msec);
-	int	(*sensors_get_crosstalk)(struct sensors_classdev *sensors_cdev,
-					unsigned int prox_data);
-	//add by yanfei for calibration fuction  20140728 end
 	int	(*sensors_self_test)(struct sensors_classdev *sensors_cdev);
 	int	(*sensors_set_latency)(struct sensors_classdev *sensor_cdev,
 					unsigned int max_latency);
@@ -165,7 +160,7 @@ struct sensors_classdev {
 	int	(*sensors_write_cal_params)(struct sensors_classdev
 				*sensor_cdev, struct cal_result_t *cal_result);
 };
-extern bool proximity_open_flag;
+
 extern int sensors_classdev_register(struct device *parent,
 				 struct sensors_classdev *sensors_cdev);
 extern void sensors_classdev_unregister(struct sensors_classdev *sensors_cdev);

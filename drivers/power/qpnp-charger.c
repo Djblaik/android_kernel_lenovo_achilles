@@ -3869,8 +3869,8 @@ qpnp_eoc_work(struct work_struct *work)
 		usbin_health = qpnp_chg_check_usbin_health(chip);
 		pr_debug("not charging ibat_ma = %d vbat_mv = %dusbin_health=%d \n",
 				ibat_ma, vbat_mv,usbin_health);
-		if(!(chg_sts & FAST_CHG_ON_IRQ	|| chg_sts & TRKL_CHG_ON_IRQ) && 
-			(qpnp_chg_is_usb_chg_plugged_in(chip) || qpnp_chg_is_dc_chg_plugged_in(chip)) 
+		if(!(chg_sts & FAST_CHG_ON_IRQ	|| chg_sts & TRKL_CHG_ON_IRQ) &&
+			(qpnp_chg_is_usb_chg_plugged_in(chip) || qpnp_chg_is_dc_chg_plugged_in(chip))
 			&&(usbin_health == USBIN_OK)) {
 			if (fastchg_err_count== CONSECUTIVE_COUNT) {
 				pr_info("fastchg error return\n");
@@ -3880,7 +3880,6 @@ qpnp_eoc_work(struct work_struct *work)
 					qpnp_chg_set_appropriate_vddmax(chip);
 					chip->chg_done = true;
 					qpnp_chg_charge_en(chip, 0);
-			/* sleep for a second before enabling */
 					msleep(2000);
 					qpnp_chg_charge_en(chip,
 						!chip->charging_disabled);
@@ -3891,7 +3890,7 @@ qpnp_eoc_work(struct work_struct *work)
 				}
 			else {
 				fastchg_err_count += 1;
-				
+
 				pr_info("fastchg_err_count = %d\n", fastchg_err_count);
 				qpnp_chg_vbatdet_set(chip, chip->max_voltage_mv - 80);
 				qpnp_chg_charge_en(chip,1);
@@ -3899,20 +3898,20 @@ qpnp_eoc_work(struct work_struct *work)
 				}
 			}
 	    /*aidongdong modify for cannot stop chg when high soc chg end 20140301*/
- 	    if (capacity_done == 100)
- 		{
- 			chip->delta_vddmax_mv = 0;
- 			qpnp_chg_set_appropriate_vddmax(chip);
- 			chip->chg_done = true;
- 			qpnp_chg_charge_en(chip, 0);
- 			/* sleep for a second before enabling */
- 			msleep(2000);
- 			qpnp_chg_charge_en(chip,
- 						!chip->charging_disabled);
- 			power_supply_changed(&chip->batt_psy);
- 			qpnp_chg_enable_irq(&chip->chg_vbatdet_lo);	
- 		}
- 	    //xiongzuan modify for don't report full status when boot up with battery full  20131223 end
+	    if (capacity_done == 100)
+		{
+			chip->delta_vddmax_mv = 0;
+			qpnp_chg_set_appropriate_vddmax(chip);
+			chip->chg_done = true;
+			qpnp_chg_charge_en(chip, 0);
+			/* sleep for a second before enabling */
+			msleep(2000);
+			qpnp_chg_charge_en(chip,
+						!chip->charging_disabled);
+			power_supply_changed(&chip->batt_psy);
+			qpnp_chg_enable_irq(&chip->chg_vbatdet_lo);
+		}
+	    //xiongzuan modify for don't report full status when boot up with battery full  20131223 end
 		pr_debug("not charging\n");
 		goto stop_eoc;
 	}

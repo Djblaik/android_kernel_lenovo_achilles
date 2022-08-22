@@ -116,7 +116,6 @@ static int hall_request_input_dev(struct device *dev,struct hall_sensor_platform
 
 			set_bit(EV_SW, pdata->input_dev->evbit);
 			set_bit(SW_LID, pdata->input_dev->swbit);
-		   
 			err = input_register_device(pdata->input_dev);
 			if (err < 0)
 			{
@@ -126,26 +125,23 @@ static int hall_request_input_dev(struct device *dev,struct hall_sensor_platform
 			}
 			return 0;
 
-}	
-
-static irqreturn_t hall_sensors_irq_handle(int irq, void *dev_id) 
-{ 
+}
+static irqreturn_t hall_sensors_irq_handle(int irq, void *dev_id)
+{
 
     disable_irq_nosync(g_hall_sensor_pdata->pdata->irq);
 //added by litao 20140609
     wake_lock_timeout(&(g_hall_sensor_pdata->pdata->hall_lock), 2*HZ);
-    schedule_work(&g_hall_sensor_pdata->pdata->work); 
-    return IRQ_HANDLED; 
+    schedule_work(&g_hall_sensor_pdata->pdata->work);
+    return IRQ_HANDLED;
 
 }
 
-static void hall_sensors_work_func(struct work_struct *work) 
+static void hall_sensors_work_func(struct work_struct *work)
 {
 		static int   gpio_val;
 		static int  delay_count=0;
-	
-		
-		gpio_val = gpio_get_value(g_hall_sensor_pdata->pdata->irq_gpio);  
+		gpio_val = gpio_get_value(g_hall_sensor_pdata->pdata->irq_gpio);
 
 		if(delay_count<g_hall_sensor_pdata->pdata->debounce/100)
 	      {
@@ -161,13 +157,11 @@ static void hall_sensors_work_func(struct work_struct *work)
 //		    	  msleep(15);
 	                delay_count++;
 //			  printk(KERN_ERR"litao %s:delay_count = %d\n",__func__,delay_count);
-                       schedule_work(&g_hall_sensor_pdata->pdata->work); 
+                       schedule_work(&g_hall_sensor_pdata->pdata->work);
 		    }
 		    return;
             }
-		
               report_val=!gpio_val;
-			  
 		if(gpio_val)
 		{
 			//far  from
@@ -181,11 +175,9 @@ static void hall_sensors_work_func(struct work_struct *work)
 			//near  to
 			//modified by yanfei for report log 20140705
 			printk(KERN_ERR"%s(),hall sensors far,report_code=%d  report_val=%d \n",__func__,g_hall_sensor_pdata->pdata->wake_key,report_val);
-        		input_report_switch(g_hall_sensor_pdata->pdata->input_dev, SW_LID, report_val);  
-			input_sync(g_hall_sensor_pdata->pdata->input_dev);   
+        		input_report_switch(g_hall_sensor_pdata->pdata->input_dev, SW_LID, report_val);
+			input_sync(g_hall_sensor_pdata->pdata->input_dev);
 		}
-
-	
 		enable_irq(g_hall_sensor_pdata->pdata->irq);
 //added by litao 20140609
 		delay_count = 0;
@@ -196,10 +188,10 @@ static ssize_t hall_show_gpio_value(struct device *dev,
 {
 	static int   gpio_val;
 	gpio_val = gpio_get_value(g_hall_sensor_pdata->pdata->irq_gpio);
-	return sprintf(buf, "%d\n", gpio_val);	
+	return sprintf(buf, "%d\n", gpio_val);
 }
 /*zhouwentao add for  run in test 2015.5.12 begin*/
-static void hall_sensors_work_test(struct work_struct *work) 
+static void hall_sensors_work_test(struct work_struct *work)
 {
 	printk(KERN_ERR"hall_sensor: run in test now! report value = %d\n",g_hall_sensor_pdata->pdata->run_rpt_val);
 	input_report_switch(g_hall_sensor_pdata->pdata->input_dev, SW_LID,g_hall_sensor_pdata->pdata->run_rpt_val);
@@ -214,7 +206,7 @@ static ssize_t hall_store_runin_test(struct device *dev,
 {
 	unsigned long val = simple_strtoul(buf, NULL, 10);
 	g_hall_sensor_pdata->pdata->run_rpt_val = 1;
-	
+
 	if(!val)
 	{
 		cancel_delayed_work(&g_hall_sensor_pdata->pdata->test_work);
@@ -320,7 +312,7 @@ static int hall_power_on_off(struct device *dev, bool on)
 //add by yanfei for HALL sensor power on 20140915 end
 //add by yanfei for pinctrl 20140705 end
 static int hall_sensor_probe(struct platform_device *pdev)
-{	
+{
 	int ret;
 	struct hall_sensor_data *hall_sensor;
 //added by litao 20140606
@@ -355,7 +347,7 @@ static int hall_sensor_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "hall sensor request input dev failed.\n");
 		return ret;
 	}
-//add by yanfei for hall sensor power on 20140915 begin 
+//add by yanfei for hall sensor power on 20140915 begin
 	ret = hall_power_init(&pdev->dev, true);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "power init failed! err=%d", ret);
@@ -365,7 +357,7 @@ static int hall_sensor_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "power on failed! err=%d\n", ret);
 		hall_power_init(&pdev->dev, false);
 	}
-//add by yanfei for hall sensor power on 20140915 end 
+//add by yanfei for hall sensor power on 20140915 end
 //added by litao for fastmmi test (ql1000) 2014-03-10 begin
 	ret= sysfs_create_group(&g_hall_sensor_pdata->pdata->input_dev->dev.kobj, &hall_sensor_attr_group);
 	if (ret)
@@ -382,13 +374,13 @@ static int hall_sensor_probe(struct platform_device *pdev)
 	wake_lock_init(&(hall_sensor->pdata->hall_lock),WAKE_LOCK_SUSPEND,"hall wakelock");
 //add by yanfei for pinctrl 20140806 begin
    	ret = hall_pinctrl_init(&pdev->dev,hall_sensor);
-	if (ret) 
+	if (ret)
 	{
 		dev_err(&pdev->dev, "Can't initialize pinctrl\n");
 		goto failed;
 	}
 	ret = pinctrl_select_state(hall_sensor->pinctrl, hall_sensor->pin_default);
-	if (ret) 
+	if (ret)
 	{
 		dev_err(&pdev->dev,
 			"Can't select pinctrl default state\n");
@@ -401,7 +393,7 @@ static int hall_sensor_probe(struct platform_device *pdev)
             dev_err(&pdev->dev,"hall sensor request gpio%d failed\n",hall_sensor->pdata->irq_gpio);
 	     goto   failed;
 	}
-			
+
        ret =gpio_direction_input(hall_sensor->pdata->irq_gpio);
        if(ret<0)
    	{
@@ -411,7 +403,7 @@ static int hall_sensor_probe(struct platform_device *pdev)
        hall_sensor->pdata->irq=gpio_to_irq(hall_sensor->pdata->irq_gpio);
 	ret= hall_sensor->pdata->power_on(true);
 //add by yanfei for pinctrl 20140705 end
-      // ret =request_threaded_irq(hall_sensor->pdata->irq,NULL,hall_sensors_irq_handle,IRQF_TRIGGER_FALLING|IRQF_TRIGGER_RISING,"hall_sensors",NULL);	
+      // ret =request_threaded_irq(hall_sensor->pdata->irq,NULL,hall_sensors_irq_handle,IRQF_TRIGGER_FALLING|IRQF_TRIGGER_RISING,"hall_sensors",NULL);
        ret = request_irq(hall_sensor->pdata->irq,hall_sensors_irq_handle, IRQF_TRIGGER_FALLING|IRQF_TRIGGER_RISING,
 			 "hall_sensors",NULL);
        if(ret<0)

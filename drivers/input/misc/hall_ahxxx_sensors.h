@@ -5,11 +5,11 @@
 
 struct hall_sensor_platform_data {
 	struct work_struct	work;
-/*zhouwentao add for  run in test 2015.5.12 begin*/	
+/*zhouwentao add for  run in test 2015.5.12 begin*/
 	u32 delay_msc;
 	u8 run_rpt_val;
 	struct delayed_work	test_work;
-/*zhouwentao add for  run in test 2015.5.12 end*/	
+/*zhouwentao add for  run in test 2015.5.12 end*/
 	struct input_dev  *input_dev;
 	struct workqueue_struct *hall_wq;
 	const char *name;

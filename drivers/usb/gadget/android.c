@@ -40,6 +40,9 @@
 #ifdef CONFIG_SND_PCM
 #include "f_audio_source.c"
 #endif
+#ifdef CONFIG_SND_RAWMIDI
+#include "f_midi.c"
+#endif
 #include "f_mass_storage.c"
 #define USB_ETH_RNDIS y
 #include "f_diag.c"
@@ -76,7 +79,6 @@
 #endif
 #include "f_ncm.c"
 #include "f_charger.c"
-int yep_mass_flag = 0;// added by Devine for usb mass_storage sd-card flag ql_1000 2014/2/8
 
 MODULE_AUTHOR("Mike Lockwood");
 MODULE_DESCRIPTION("Android Composite USB Driver");
@@ -90,6 +92,11 @@ static const char longname[] = "Gadget Android";
 #define PRODUCT_ID		0x0001
 
 #define ANDROID_DEVICE_NODE_NAME_LENGTH 11
+/* f_midi configuration */
+#define MIDI_INPUT_PORTS    1
+#define MIDI_OUTPUT_PORTS   1
+#define MIDI_BUFFER_SIZE    1024
+#define MIDI_QUEUE_LENGTH   32
 
 struct android_usb_function {
 	char *name;
@@ -2415,8 +2422,7 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		pr_err("Memory allocation failed.\n");
 		return -ENOMEM;
 	}
-//deleted by litao 20140721 begin
-/*
+
 	config->fsg.nluns = 1;
 	snprintf(name[0], MAX_LUN_NAME, "lun");
 	config->fsg.luns[0].removable = 1;
@@ -2428,22 +2434,7 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "rom");
 		config->fsg.nluns++;
 	}
-*/
-//deleted by litao 20140721 end
-//added by litao 20140721 begin
-    	config->fsg.nluns = 0;
-	snprintf(name[1], MAX_LUN_NAME, "lun");
-	config->fsg.luns[1].removable = 1;
-    config->fsg.luns[1].nofua = 1; // Added by yanwenlong for usb speed. (general) 2014-6-3
- 
-	if (dev->pdata && dev->pdata->cdrom) {
-		config->fsg.luns[config->fsg.nluns].cdrom = 1;
-		config->fsg.luns[config->fsg.nluns].ro = 1;
-		config->fsg.luns[config->fsg.nluns].removable = 0;
-		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "rom");
-	}
-	config->fsg.nluns = 2;
-//added by litao 20140721 end
+
 	if (uicc_nluns > FSG_MAX_LUNS - config->fsg.nluns) {
 		uicc_nluns = FSG_MAX_LUNS - config->fsg.nluns;
 		pr_debug("limiting uicc luns to %d\n", uicc_nluns);
@@ -2453,7 +2444,6 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		n = config->fsg.nluns;
 		snprintf(name[n], MAX_LUN_NAME, "uicc%d", i);
 		config->fsg.luns[n].removable = 1;
-        config->fsg.luns[n].nofua = 1; // Added by yanwenlong for usb speed. (general) 2014-6-3
 		config->fsg.nluns++;
 	}
 
@@ -2734,7 +2724,8 @@ static ssize_t audio_source_pcm_show(struct device *dev,
 	struct audio_source_config *config = f->config;
 
 	/* print PCM card and device numbers */
-	return sprintf(buf, "%d %d\n", config->card, config->device);
+	return snprintf(buf, PAGE_SIZE,
+			"%d %d\n", config->card, config->device);
 }
 
 static DEVICE_ATTR(pcm, S_IRUGO, audio_source_pcm_show, NULL);
@@ -2800,6 +2791,61 @@ static struct android_usb_function uasp_function = {
 	.bind_config	= uasp_function_bind_config,
 };
 
+#ifdef CONFIG_SND_RAWMIDI
+static int midi_function_init(struct android_usb_function *f,
+					struct usb_composite_dev *cdev)
+{
+	struct midi_alsa_config *config;
+
+	config = kzalloc(sizeof(struct midi_alsa_config), GFP_KERNEL);
+	f->config = config;
+	if (!config)
+		return -ENOMEM;
+	config->card = -1;
+	config->device = -1;
+	return 0;
+}
+
+static void midi_function_cleanup(struct android_usb_function *f)
+{
+	kfree(f->config);
+}
+
+static int midi_function_bind_config(struct android_usb_function *f,
+						struct usb_configuration *c)
+{
+	struct midi_alsa_config *config = f->config;
+
+	return f_midi_bind_config(c, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1,
+			MIDI_INPUT_PORTS, MIDI_OUTPUT_PORTS, MIDI_BUFFER_SIZE,
+			MIDI_QUEUE_LENGTH, config);
+}
+
+static ssize_t midi_alsa_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct midi_alsa_config *config = f->config;
+
+	/* print ALSA card and device numbers */
+	return sprintf(buf, "%d %d\n", config->card, config->device);
+}
+
+static DEVICE_ATTR(alsa, S_IRUGO, midi_alsa_show, NULL);
+
+static struct device_attribute *midi_function_attributes[] = {
+	&dev_attr_alsa,
+	NULL
+};
+
+static struct android_usb_function midi_function = {
+	.name		= "midi",
+	.init		= midi_function_init,
+	.cleanup	= midi_function_cleanup,
+	.bind_config	= midi_function_bind_config,
+	.attributes	= midi_function_attributes,
+};
+#endif
 static struct android_usb_function *supported_functions[] = {
 	&ffs_function,
 	&mbim_function,
@@ -2828,6 +2874,9 @@ static struct android_usb_function *supported_functions[] = {
 #endif
 	&uasp_function,
 	&charger_function,
+#ifdef CONFIG_SND_RAWMIDI
+	&midi_function,
+#endif
 	NULL
 };
 
@@ -3130,23 +3179,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	}
 
 	strlcpy(buf, buff, sizeof(buf));
-	/*added by Devine for usb mass_storage sd-card flag ql_1000 2014/2/8 */
-	if(!strcmp(buf, "diag,serial,mass_storage") || !strcmp(buf, "diag,serial,mass_storage,adb") || !strcmp(buf, "mtp,mass_storage")|| !strcmp(buf, "mtp,adb,mass_storage"))
-	    {
-	          yep_mass_flag = 1;
-	    }
-	else if(!strcmp(buf, "mass_storage") || !strcmp(buf, "mass_storage,adb"))
-	{
-		   yep_mass_flag = 2;
-	}
-	else
-	{
-		   yep_mass_flag = 0;
-	}
-	/*added by Devine for usb mass_storage sd-card flag ql_1000 2014/2/8 */
-//Added by Devine Modification for MTP MSFT OS Descriptor
-	(void)mtp_read_usb_functions(buf);
-//Added by Devine Modification for MTP MSFT OS Descriptor
 	b = strim(buf);
 
 	dev->cdev->gadget->streaming_enabled = false;
