@@ -81,8 +81,14 @@ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_RMI4_DEV)	+= synaptics_rmi_dev.o
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE) 	+= synaptics_fw_update.o
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4)		+= synaptics_i2c_rmi4.o
 obj-$(CONFIG_TOUCHSCREEN_GT9XX)		+= gt9xx/
-obj-$(CONFIG_TOUCHSCREEN_FTS)		+= FT5626/
-obj-$(CONFIG_TOUCHSCREEN_GT9110)		+= GT9110/
 obj-$(CONFIG_TOUCHSCREEN_BU21150)	+= bu21150.o
 obj-$(CONFIG_INPUT_MT_WRAPPER)		+= input_mt_wrapper.o
-obj-$(CONFIG_TOUCHSCREEN_IT7260_I2C)    += it7258_ts_i2c.o
+
+#add by litao begin
+obj-$(CONFIG_TOUCHSCREEN_MSG22XX)		+= msg22xx/
+obj-$(CONFIG_TOUCHSCREEN_FT5X36)	+= ft5x36_ts.o
+obj-$(CONFIG_TOUCHSCREEN_FT5X36)	+= ft5x36_ex.o
+obj-$(CONFIG_TOUCHSCREEN_FT5X36)	+= ft5x36_ctl.o
+extlibs:=$(PWD)/drivers/input/touchscreen/ft_gesture_lib.a
+ldflags-y+=--whole-archive $(extlibs) --no-whole-archive
+#add by litao end

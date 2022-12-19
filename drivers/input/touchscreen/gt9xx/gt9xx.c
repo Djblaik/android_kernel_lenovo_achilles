@@ -511,10 +511,6 @@ static void gtp_touch_down(struct goodix_ts_data* ts,s32 id,s32 x,s32 y,s32 w)
 #if GTP_CHANGE_X2Y
 	GTP_SWAP(x, y);
 #endif
-#if GTP_CHANGE_X
-     x=ts->abs_x_max-x-1;
-#endif
-
 #if GTP_ICS_SLOT_REPORT
 	input_mt_slot(ts->input_dev, id);
 	input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, id);
@@ -3558,10 +3554,14 @@ Output:
 	}
 #endif
 //added by chenchen for gesture 20140925 end 
-
-#if GTP_ESD_PROTECT
-	gtp_esd_switch(client, SWITCH_ON);
-#endif    
+    
+#if GTP_AUTO_UPDATE
+    ret = gup_init_update_proc(ts);
+    if (ret < 0)
+    {
+        GTP_ERROR("Create update thread error.");
+    }
+#endif
 
 	ret = gtp_request_input_dev(ts);
     if (ret < 0)
@@ -3624,13 +3624,6 @@ Output:
 	gtp_hardware_info_reg(ts);
 #endif
 //Added by chenchen for hardware_info 20140521 end
-#if GTP_AUTO_UPDATE
-      ret = gup_init_update_proc(ts);
-      if (ret < 0)
-      {
-          GTP_ERROR("Create update thread error.");
-      }
-#endif
     
 	ret = gtp_request_irq(ts);
 	if (ret < 0)
@@ -3644,6 +3637,9 @@ Output:
 	init_wr_node(client);
 #endif
     
+#if GTP_ESD_PROTECT
+	gtp_esd_switch(client, SWITCH_ON);
+#endif
 	return 0;
 #if defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
@@ -4142,13 +4138,13 @@ s32 gtp_i2c_read_no_rst(struct i2c_client *client, u8 *buf, s32 len)
     msgs[0].addr  = client->addr;
     msgs[0].len   = GTP_ADDR_LENGTH;
     msgs[0].buf   = &buf[0];
-    //msgs[0].scl_rate = 400 * 1000;    // for Rockchip, etc.
+    //msgs[0].scl_rate = 300 * 1000;    // for Rockchip, etc.
     
     msgs[1].flags = I2C_M_RD;
     msgs[1].addr  = client->addr;
     msgs[1].len   = len - GTP_ADDR_LENGTH;
     msgs[1].buf   = &buf[GTP_ADDR_LENGTH];
-    //msgs[1].scl_rate = 400 * 1000;
+    //msgs[1].scl_rate = 300 * 1000;
 
     while(retries < 3)	//modified for cut back retry num by zenguang 2014.10.17
     {

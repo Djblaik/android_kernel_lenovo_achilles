@@ -119,8 +119,8 @@ static void tool_set_proc_name(char * procname)
         }
     }
     
-    //sprintf(procname, "gmnode%04d%02d%02d", n_year, n_month, n_day);    
-    sprintf(procname, "goodix_tool");       //SW00177771  shihuijun  20151120
+    sprintf(procname, "gmnode%04d%02d%02d", n_year, n_month, n_day);    
+    //sprintf(procname, "goodix_tool");
     //GTP_DEBUG("procname = %s", procname);
 }
 //modified for transfer data size start by zengguang  2014.07.15
@@ -628,8 +628,7 @@ ssize_t goodix_tool_read(struct file *file, char __user *page, size_t size, loff
         if (1 == cmd_head.flag)
         {
 /*add for judge gesture FW correct by zengguang 2015.01.04 begin*/
-		//if(1 != FW_check_time_flag) 
-		if(0)   //SW00177771  shihuijun  20151120
+		if(1 != FW_check_time_flag)          
               {
               	printk(KERN_INFO"ENTER gwake FW!!!!!!!!!!!\n");
                 #if GTP_ESD_PROTECT

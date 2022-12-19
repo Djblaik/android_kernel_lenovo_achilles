@@ -149,16 +149,7 @@ void set_rate_mnd(struct rcg_clk *rcg, struct clk_freq_tbl *nf)
 	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
 }
 
-static int rcg_clk_prepare(struct clk *c)
-{
-	struct rcg_clk *rcg = to_rcg_clk(c);
 
-	WARN(rcg->current_freq == &rcg_dummy_freq,
-		"Attempting to prepare %s before setting its rate. "
-		"Set the rate first!\n", rcg->c.dbg_name);
-
-	return 0;
-}
 
 static int rcg_clk_set_rate(struct clk *c, unsigned long rate)
 {
@@ -188,6 +179,17 @@ static int rcg_clk_set_rate(struct clk *c, unsigned long rate)
 	c->parent = nf->src_clk;
 
 	__clk_post_reparent(c, cf->src_clk, &flags);
+
+	return 0;
+}
+
+static int rcg_clk_prepare(struct clk *c)
+{
+	struct rcg_clk *rcg = to_rcg_clk(c);
+
+	WARN(rcg->current_freq == &rcg_dummy_freq,
+		"Attempting to prepare %s before setting its rate. "
+		"Set the rate first!\n", rcg->c.dbg_name);
 
 	return 0;
 }
