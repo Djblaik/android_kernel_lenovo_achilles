@@ -63,15 +63,22 @@
 
 /***************************PART1:ON/OFF define*******************************/
 #define GTP_CUSTOM_CFG			0
-#define GTP_CHANGE_X2Y			0
-#define GTP_CHANGE_X			0
+/*modified for  [SW00188085] by miaoxiliang 2016.7.8 begin*/
+#define GTP_CHANGE_X2Y			1
+#define GTP_CHANGE_X			1
+//#define GTP_CHANGE_X2Y			0
+/*modified for  [SW00188085] by miaoxiliang 2016.7.8 end*/
 #define GTP_DRIVER_SEND_CFG		1
 //#define GTP_HAVE_TOUCH_KEY		0  /*del for dtsi vkey by zengguang 2014.6.24*/
 #define GTP_POWER_CTRL_SLEEP	0
 #define GTP_ICS_SLOT_REPORT	1
+/*modified for  [SW00188085] by miaoxiliang 2016.7.7 begin*/
+#define GTP_AUTO_UPDATE       0    // auto update fw by .bin file as default
+#define GTP_HEADER_FW_UPDATE  0//  1   // auto update fw by gtp_default_FW in gt9xx_firmware.h, function together with GTP_AUTO_UPDATE
+//#define GTP_AUTO_UPDATE       1    // auto update fw by .bin file as default
+//#define GTP_HEADER_FW_UPDATE  1   // auto update fw by gtp_default_FW in gt9xx_firmware.h, function together with GTP_AUTO_UPDATE
+/*modified for  [SW00188085] by miaoxiliang 2016.7.7 end*/
 
-#define GTP_AUTO_UPDATE       1    // auto update fw by .bin file as default
-#define GTP_HEADER_FW_UPDATE  1   // auto update fw by gtp_default_FW in gt9xx_firmware.h, function together with GTP_AUTO_UPDATE
 #define GTP_AUTO_UPDATE_CFG   0    // auto update config by .cfg file, function together with GTP_AUTO_UPDATE
 
 #define GTP_COMPATIBLE_MODE   0    // compatible with GT9XXF
@@ -90,7 +97,7 @@
 //modified to 12 for param switch by zhangdangku 2015.01.29
 #define GOODIX_MAX_CFG_GROUP	12	
 #define GTP_FW_NAME_MAXSIZE	50
-#define GTP_GESTURE_WAKEUP    0    //close gesture for lenovo pad by pangle 
+#define GTP_GESTURE_WAKEUP    1    //close gesture for lenovo pad by pangle 
 
 #define GTP_DEBUG_ON          0
 #define GTP_DEBUG_ARRAY_ON    0
@@ -147,6 +154,7 @@ struct goodix_ts_data {
 	
 	struct work_struct	work;
        s32 irq_is_disable;
+	   s32 irq_wake_is_disable;   //add by pangle at 20150921
 	s32 use_irq;
 	u16 abs_x_max;
 	u16 abs_y_max;
@@ -339,7 +347,10 @@ extern u16 total_len;
 #else
 #define GTP_MAX_HEIGHT		4096
 #define GTP_MAX_WIDTH		4096
-#define GTP_INT_TRIGGER		GTP_IRQ_TAB_FALLING
+/*modified for  [SW00188085] by miaoxiliang 2016.7.7 begin*/
+#define GTP_INT_TRIGGER		GTP_IRQ_TAB_RISING//GTP_IRQ_TAB_FALLING
+//#define GTP_INT_TRIGGER	GTP_IRQ_TAB_FALLING
+/*modified for  [SW00188085] by miaoxiliang 2016.7.7 end*/
 #endif
 
 #define GTP_MAX_TOUCH         10

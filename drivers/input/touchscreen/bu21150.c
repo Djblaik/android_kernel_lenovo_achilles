@@ -36,6 +36,8 @@
 #include <linux/timer.h>
 #include <linux/notifier.h>
 #include <linux/fb.h>
+#include <linux/msm_mdp.h>
+#include <linux/list.h>
 
 /* define */
 #define DEVICE_NAME   "jdi-bu21150"
@@ -60,7 +62,12 @@
 #define BU21150_MAX_OPS_LOAD_UA	150000
 #define BU21150_PIN_ENABLE_DELAY_US		1000
 #define BU21150_PINCTRL_VALID_STATE_CNT		2
+#define	BU21150_RESET_DURATION_US		10
+#define	BU21150_HOLD_DURATION_US		10
+#define BU21150_REG_INT_RUN_ENB_DELAY1_MS	70
+#define BU21150_REG_INT_RUN_ENB_DELAY2_US	1000
 
+#define AFE_SCAN_DEFAULT			0x00
 #define AFE_SCAN_SELF_CAP			0x01
 #define AFE_SCAN_MUTUAL_CAP			0x02
 #define AFE_SCAN_GESTURE_SELF_CAP		0x04
@@ -76,6 +83,14 @@
 #define BU21150_PINCTRL_DISP_VSN_SUS		"disp_vsn_suspend"
 #define BU21150_PINCTRL_DDIC_RST_ACT		"ddic_rst_active"
 #define BU21150_PINCTRL_DDIC_RST_SUS		"ddic_rst_suspend"
+
+#define BU21150_LIST_MAX_FRAMES			20
+
+struct bu21150_frame {
+	struct list_head list;
+	u8 frame[MAX_FRAME_SIZE];
+	struct timeval tv;
+};
 
 /* struct */
 struct bu21150_data {
@@ -95,11 +110,13 @@ struct bu21150_data {
 	struct notifier_block fb_notif;
 	/* frame */
 	struct bu21150_ioctl_get_frame_data req_get;
-	u8 frame[MAX_FRAME_SIZE];
+	struct bu21150_frame frame_list;
+	u8 frame_count;
 	struct bu21150_ioctl_get_frame_data frame_get;
-	struct timeval tv;
 	struct mutex mutex_frame;
 	struct mutex mutex_wake;
+	struct mutex mutex_irq;
+	bool irq_enabled;
 	/* frame work */
 	u8 frame_work[MAX_FRAME_SIZE];
 	struct bu21150_ioctl_get_frame_data frame_work_get;
@@ -126,6 +143,7 @@ struct bu21150_data {
 	int mod_en_gpio;
 	int disp_vsn_gpio;
 	int ddic_rst_gpio;
+	int irq_count;
 	const char *panel_model;
 	const char *afe_version;
 	const char *pitch_type;
@@ -137,6 +155,7 @@ struct bu21150_data {
 	bool suspended;
 	u8 unblock_flag;
 	u8 force_unblock_flag;
+	bool lcd_on;
 };
 
 struct ser_req {
@@ -180,7 +199,7 @@ static void get_frame_timer_init(void);
 static void get_frame_timer_handler(unsigned long data);
 static void get_frame_timer_delete(void);
 static int bu21150_fb_suspend(struct device *dev);
-static int bu21150_fb_resume(struct device *dev);
+static int bu21150_fb_early_resume(struct device *dev);
 static int fb_notifier_callback(struct notifier_block *self,
 					unsigned long event, void *data);
 
@@ -188,6 +207,31 @@ static int fb_notifier_callback(struct notifier_block *self,
 static struct spi_device *g_client_bu21150;
 static int g_io_opened;
 static struct timer_list get_frame_timer;
+
+static void bu21150_enable_irq(struct bu21150_data *ts)
+{
+	mutex_lock(&ts->mutex_irq);
+	if (!ts->irq_count) {
+		enable_irq(ts->client->irq);
+		ts->irq_count++;
+	} else {
+		pr_err("%s: irq is already enabled\n", __func__);
+	}
+	mutex_unlock(&ts->mutex_irq);
+}
+
+static void bu21150_disable_irq(struct bu21150_data *ts)
+{
+
+	mutex_lock(&ts->mutex_irq);
+	if (ts->irq_count) {
+		disable_irq(ts->client->irq);
+		ts->irq_count--;
+	} else {
+		pr_err("%s: irq is already disabled\n", __func__);
+	}
+	mutex_unlock(&ts->mutex_irq);
+}
 
 static ssize_t bu21150_wake_up_enable_store(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
@@ -205,14 +249,20 @@ static ssize_t bu21150_wake_up_enable_store(struct kobject *kobj,
 
 	mutex_lock(&ts->mutex_wake);
 	if (state == 0) {
+		if (!ts->wake_up)
+			goto exit;
 		disable_irq_wake(ts->client->irq);
 		device_init_wakeup(&ts->client->dev, false);
 		ts->wake_up = false;
 	} else {
+		if (ts->wake_up)
+			goto exit;
 		device_init_wakeup(&ts->client->dev, true);
 		enable_irq_wake(ts->client->irq);
 		ts->wake_up = true;
 	}
+
+exit:
 	mutex_unlock(&ts->mutex_wake);
 
 	return count;
@@ -231,9 +281,14 @@ static ssize_t bu21150_trigger_esd_store(struct kobject *kobj,
 {
 	struct bu21150_data *ts = spi_get_drvdata(g_client_bu21150);
 
-	disable_irq(ts->client->irq);
+	if (!ts->irq_enabled) {
+		pr_err("%s: irq is not requested\n", __func__);
+		return -EINVAL;
+	}
+
+	bu21150_disable_irq(ts);
 	msleep(ESD_TEST_TIMER_MS);
-	enable_irq(ts->client->irq);
+	bu21150_enable_irq(ts);
 
 	return count;
 }
@@ -909,6 +964,8 @@ static int bu21150_probe(struct spi_device *client)
 		goto err_pin_enable;
 	}
 
+	INIT_LIST_HEAD(&ts->frame_list.list);
+
 	mutex_init(&ts->mutex_frame);
 	init_waitqueue_head(&(ts->frame_waitq));
 
@@ -947,6 +1004,7 @@ static int bu21150_probe(struct spi_device *client)
 		device_init_wakeup(&client->dev, ts->wake_up);
 
 	mutex_init(&ts->mutex_wake);
+	mutex_init(&ts->mutex_irq);
 
 	return 0;
 
@@ -976,15 +1034,19 @@ err_parse_dt:
 static int bu21150_fb_suspend(struct device *dev)
 {
 	struct bu21150_data *ts = spi_get_drvdata(g_client_bu21150);
-	struct spi_device *client = ts->client;
 	int rc;
 	u8 buf1[2] = {0x00, 0x00};
 	u8 buf2[2] = {0x04, 0x00};
+	struct bu21150_frame *temp;
+	struct list_head *pos, *n;
 
 	if (ts->suspended)
 		return 0;
 
-	bu21150_write_register(REG_SENS_START, (u16)sizeof(buf1), buf1);
+	rc = bu21150_write_register(REG_SENS_START, (u16)sizeof(buf1), buf1);
+	if (rc)
+		dev_err(&ts->client->dev,
+			"%s: failed to disable sensing (%d)\n", __func__, rc);
 
 	ts->timeout_enb = 0;
 	get_frame_timer_delete();
@@ -993,10 +1055,24 @@ static int bu21150_fb_suspend(struct device *dev)
 	/* wake up */
 	wake_up_frame_waitq(ts);
 
-	bu21150_write_register(REG_INT_RUN_ENB, (u16)sizeof(buf2), buf2);
+	/* empty list */
+	mutex_lock(&ts->mutex_frame);
+	list_for_each_safe(pos, n, &ts->frame_list.list) {
+		 temp = list_entry(pos, struct bu21150_frame, list);
+		 list_del(pos);
+		 kfree(temp);
+	}
+	ts->frame_count = 0;
+	mutex_unlock(&ts->mutex_frame);
+
+	rc = bu21150_write_register(REG_INT_RUN_ENB, (u16)sizeof(buf2), buf2);
+	if (rc)
+		dev_err(&ts->client->dev,
+			"%s: failed to write to REG_INT_RUN_ENB (%d)\n",
+			__func__, rc);
 
 	if (!ts->wake_up) {
-		disable_irq(client->irq);
+		bu21150_disable_irq(ts);
 		rc = bu21150_pin_enable(ts, false);
 		if (rc) {
 			dev_err(&ts->client->dev,
@@ -1022,12 +1098,13 @@ err_power_disable:
 	return rc;
 }
 
-static int bu21150_fb_resume(struct device *dev)
+static int bu21150_fb_early_resume(struct device *dev)
 {
 	struct bu21150_data *ts = spi_get_drvdata(g_client_bu21150);
 	int rc;
 	u8 buf[2] = {0x01, 0x00};
-	u8 buf1[2] = {0x00, 0x00};
+	struct bu21150_frame *temp;
+	struct list_head *pos, *n;
 
 	if (!ts->suspended)
 		return 0;
@@ -1040,25 +1117,68 @@ static int bu21150_fb_resume(struct device *dev)
 			return rc;
 		}
 
+		rc = bu21150_pinctrl_select(ts, true);
+		if (rc < 0) {
+			dev_err(&ts->client->dev,
+				"failed to enable panel pins\n");
+			goto err_pin_enable;
+		}
+
 		/*
 		 * Wait before pin enablement to comply
 		 * with hardware requirement.
 		 */
-		usleep(BU21150_PIN_ENABLE_DELAY_US);
+		usleep_range(BU21150_PIN_ENABLE_DELAY_US,
+			BU21150_PIN_ENABLE_DELAY_US +
+			BU21150_HOLD_DURATION_US);
+
+		rc = bu21150_pinctrl_select(ts, false);
+		if (rc < 0) {
+			dev_err(&ts->client->dev,
+				"failed to toggle AFE reset pin\n");
+			goto err_pin_enable;
+		}
+
+		usleep_range(BU21150_RESET_DURATION_US,
+				BU21150_RESET_DURATION_US +
+				BU21150_HOLD_DURATION_US);
 
 		rc = bu21150_pin_enable(ts, true);
 		if (rc) {
 			dev_err(&ts->client->dev,
-				"failed to enable panel power\n");
+				"failed to enable pin\n");
 			goto err_pin_enable;
 		}
 	}
-	bu21150_write_register(REG_SENS_START, (u16)sizeof(buf1), buf1);
 
 	ts->timeout_enb = 0;
 	get_frame_timer_delete();
 
-	bu21150_write_register(REG_INT_RUN_ENB, (u16)sizeof(buf), buf);
+	rc = bu21150_write_register(REG_INT_RUN_ENB, (u16)sizeof(buf), buf);
+	if (rc)
+		dev_err(&ts->client->dev,
+			"%s: failed to write %d to REG_INT_RUN_ENB (%d)\n",
+			__func__, buf[0], rc);
+	msleep(BU21150_REG_INT_RUN_ENB_DELAY1_MS);
+
+	buf[0] = 0x03;
+	rc = bu21150_write_register(REG_INT_RUN_ENB, (u16)sizeof(buf), buf);
+	if (rc)
+		dev_err(&ts->client->dev,
+			"%s: failed to write %d to REG_INT_RUN_ENB (%d)\n",
+			__func__, buf[0], rc);
+	usleep_range(BU21150_REG_INT_RUN_ENB_DELAY2_US,
+		BU21150_REG_INT_RUN_ENB_DELAY2_US + BU21150_HOLD_DURATION_US);
+
+	/* empty list */
+	mutex_lock(&ts->mutex_frame);
+	list_for_each_safe(pos, n, &ts->frame_list.list) {
+		 temp = list_entry(pos, struct bu21150_frame, list);
+		 list_del(pos);
+		 kfree(temp);
+	}
+	ts->frame_count = 0;
+	mutex_unlock(&ts->mutex_frame);
 
 	ts->suspended = false;
 
@@ -1075,17 +1195,35 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	struct fb_event *evdata = data;
 	int *blank;
-	struct bu21150_data *bu21150_dev_data =
+	bool cont_splash = msm_fb_get_cont_splash();
+	struct bu21150_data *ts =
 			container_of(self, struct bu21150_data, fb_notif);
+	struct device *dev;
 
-	if (evdata && evdata->data && bu21150_dev_data &&
-						bu21150_dev_data->client) {
+	if (evdata && evdata->data && ts && ts->client) {
+		dev = &ts->client->dev;
 		blank = evdata->data;
-		if (event == FB_EARLY_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
-			bu21150_fb_resume(&bu21150_dev_data->client->dev);
-		else if (event == FB_EVENT_BLANK && *blank ==
-							FB_BLANK_POWERDOWN)
-			bu21150_fb_suspend(&bu21150_dev_data->client->dev);
+		if (event == FB_EARLY_EVENT_BLANK) {
+			if (*blank == FB_BLANK_UNBLANK) {
+				ts->lcd_on = true;
+				if (!cont_splash)
+					bu21150_fb_early_resume(dev);
+			} else if (*blank == FB_BLANK_POWERDOWN) {
+				ts->lcd_on = false;
+			}
+		} else if (event == FB_R_EARLY_EVENT_BLANK) {
+			if (*blank == FB_BLANK_UNBLANK) {
+				ts->lcd_on = false;
+				if (!cont_splash)
+					bu21150_fb_early_resume(dev);
+			} else if (*blank == FB_BLANK_POWERDOWN) {
+				ts->lcd_on = true;
+			}
+		} else if (event == FB_EVENT_BLANK && *blank ==
+							FB_BLANK_POWERDOWN) {
+			if (!cont_splash)
+				bu21150_fb_suspend(dev);
+		}
 	}
 
 	return 0;
@@ -1138,6 +1276,7 @@ static int bu21150_remove(struct spi_device *client)
 	struct bu21150_data *ts = spi_get_drvdata(client);
 	int i;
 
+	mutex_destroy(&ts->mutex_irq);
 	mutex_destroy(&ts->mutex_wake);
 	if (ts->wake_up)
 		device_init_wakeup(&client->dev, 0);
@@ -1150,7 +1289,6 @@ static int bu21150_remove(struct spi_device *client)
 	misc_deregister(&g_bu21150_misc_device);
 	bu21150_power_enable(ts, false);
 	bu21150_regulator_config(ts, false);
-	free_irq(client->irq, ts);
 	mutex_destroy(&ts->mutex_frame);
 	bu21150_pin_enable(ts, false);
 	kfree(ts);
@@ -1161,8 +1299,6 @@ static int bu21150_remove(struct spi_device *client)
 static int bu21150_open(struct inode *inode, struct file *filp)
 {
 	struct bu21150_data *ts = spi_get_drvdata(g_client_bu21150);
-	struct spi_device *client = ts->client;
-	int error;
 
 	if (g_io_opened) {
 		pr_err("%s: g_io_opened not zero.\n", __func__);
@@ -1186,17 +1322,6 @@ static int bu21150_open(struct inode *inode, struct file *filp)
 	memset(&(ts->frame_work_get), 0,
 		sizeof(struct bu21150_ioctl_get_frame_data));
 
-	error = request_threaded_irq(client->irq, NULL, bu21150_irq_thread,
-				IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-				client->dev.driver->name, ts);
-	if (error) {
-		dev_err(&client->dev, "Failed to register interrupt\n");
-		return error;
-	}
-
-	if (ts->wake_up)
-		enable_irq_wake(ts->client->irq);
-
 	return 0;
 }
 
@@ -1214,10 +1339,14 @@ static int bu21150_release(struct inode *inode, struct file *filp)
 	if (g_io_opened < 0)
 		g_io_opened = 0;
 
-	if (ts->wake_up)
-		disable_irq_wake(ts->client->irq);
+	wake_up_frame_waitq(ts);
+	if (ts->timeout_enb)
+		get_frame_timer_delete();
 
-	free_irq(client->irq, ts);
+	if (ts->irq_enabled) {
+		free_irq(client->irq, ts);
+		ts->irq_enabled = false;
+	}
 
 	return 0;
 }
@@ -1289,6 +1418,21 @@ static long bu21150_ioctl_get_frame(unsigned long arg)
 		return -EINVAL;
 	}
 
+
+	if (!ts->irq_enabled) {
+		ret = request_threaded_irq(ts->client->irq, NULL,
+					bu21150_irq_thread,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					ts->client->dev.driver->name, ts);
+		if (ret) {
+			dev_err(&ts->client->dev, "Failed to register interrupt\n");
+			return ret;
+		}
+
+		ts->irq_enabled = true;
+		ts->irq_count = 1;
+	}
+
 	if (ts->timeout_enb == 1)
 		get_frame_timer_init();
 
@@ -1307,16 +1451,35 @@ static long bu21150_ioctl_get_frame(unsigned long arg)
 	/* copy frame */
 	mutex_lock(&ts->mutex_frame);
 	frame_size = ts->frame_get.size;
-	if (copy_to_user(data.buf, ts->frame, frame_size)) {
+
+	if (!list_empty(&ts->frame_list.list)) {
+		struct bu21150_frame *temp;
+
+		temp = list_first_entry(&ts->frame_list.list,
+				struct bu21150_frame, list);
+		if (copy_to_user(data.buf, temp->frame, frame_size)) {
+			mutex_unlock(&ts->mutex_frame);
+			pr_err("%s: Failed to copy_to_user().\n", __func__);
+			return -EFAULT;
+		}
+		if (copy_to_user(data.tv, &(temp->tv),
+				sizeof(struct timeval))) {
+			mutex_unlock(&ts->mutex_frame);
+			pr_err("%s: Failed to copy_to_user().\n", __func__);
+			return -EFAULT;
+		}
+		list_del(&temp->list);
+		kfree(temp);
+		ts->frame_count--;
+	} else {
+		pr_debug("%s: no frame!!! unblock\n", __func__);
 		mutex_unlock(&ts->mutex_frame);
-		pr_err("%s: Failed to copy_to_user().\n", __func__);
-		return -EFAULT;
+		return BU21150_UNBLOCK;
 	}
-	if (copy_to_user(data.tv, &(ts->tv), sizeof(struct timeval))) {
-		mutex_unlock(&ts->mutex_frame);
-		pr_err("%s: Failed to copy_to_user().\n", __func__);
-		return -EFAULT;
-	}
+
+	if (!list_empty(&ts->frame_list.list))
+		wake_up_frame_waitq(ts);
+
 	mutex_unlock(&ts->mutex_frame);
 
 	return 0;
@@ -1338,12 +1501,12 @@ static long bu21150_ioctl_reset(unsigned long reset)
 	}
 
 	if (reset == BU21150_RESET_LOW) {
-		disable_irq(ts->client->irq);
+		bu21150_disable_irq(ts);
 		rc = bu21150_pinctrl_select(ts, false);
 		if (rc) {
 			pr_err("%s: failed to pull low reset line\n",
 								__func__);
-			enable_irq(ts->client->irq);
+			bu21150_enable_irq(ts);
 			return rc;
 		}
 	} else if (reset == BU21150_RESET_HIGH) {
@@ -1353,7 +1516,7 @@ static long bu21150_ioctl_reset(unsigned long reset)
 								__func__);
 			return rc;
 		}
-		enable_irq(ts->client->irq);
+		bu21150_enable_irq(ts);
 	}
 
 reset_exit:
@@ -1369,6 +1532,7 @@ static long bu21150_ioctl_spi_read(unsigned long arg)
 	struct bu21150_data *ts = spi_get_drvdata(g_client_bu21150);
 	void __user *argp = (void __user *)arg;
 	struct bu21150_ioctl_spi_data data;
+	int ret;
 
 	if (arg == 0) {
 		pr_err("%s: arg == 0.\n", __func__);
@@ -1385,7 +1549,11 @@ static long bu21150_ioctl_spi_read(unsigned long arg)
 		return -EINVAL;
 	}
 
-	bu21150_read_register(data.addr, data.count, ts->spi_buf);
+	ret = bu21150_read_register(data.addr, data.count, ts->spi_buf);
+	if (ret) {
+		pr_err("%s: Failed to read register (%d).\n", __func__, ret);
+		return ret;
+	}
 
 	if (copy_to_user(data.buf, ts->spi_buf, data.count)) {
 		pr_err("%s: Failed to copy_to_user().\n", __func__);
@@ -1400,6 +1568,11 @@ static long bu21150_ioctl_spi_write(unsigned long arg)
 	struct bu21150_data *ts = spi_get_drvdata(g_client_bu21150);
 	void __user *argp = (void __user *)arg;
 	struct bu21150_ioctl_spi_data data;
+	unsigned int afe_active_mode = AFE_SCAN_SELF_CAP | AFE_SCAN_MUTUAL_CAP;
+	unsigned int afe_gesture_mode = AFE_SCAN_GESTURE_SELF_CAP |
+						AFE_SCAN_GESTURE_MUTUAL_CAP;
+	bool valid_op;
+	int ret;
 
 	if (arg == 0) {
 		pr_err("%s: arg == 0.\n", __func__);
@@ -1410,6 +1583,16 @@ static long bu21150_ioctl_spi_write(unsigned long arg)
 		pr_err("%s: Failed to copy_from_user().\n", __func__);
 		return -EFAULT;
 	}
+
+	valid_op = (data.next_mode == AFE_SCAN_DEFAULT) ||
+			((data.next_mode & afe_active_mode) && ts->lcd_on) ||
+			((data.next_mode & afe_gesture_mode) && !ts->lcd_on);
+	if (!valid_op) {
+		pr_err("%s: AFE scan mode(%d) and LCD state(%d) conflict\n",
+					__func__, data.next_mode, ts->lcd_on);
+		return -EINVAL;
+	}
+
 	if (data.buf == 0 || data.count == 0 ||
 		MAX_FRAME_SIZE < data.count) {
 		pr_err("%s: data.buf == 0 ...\n", __func__);
@@ -1420,9 +1603,11 @@ static long bu21150_ioctl_spi_write(unsigned long arg)
 		return -EFAULT;
 	}
 
-	bu21150_write_register(data.addr, data.count, ts->spi_buf);
+	ret = bu21150_write_register(data.addr, data.count, ts->spi_buf);
+	if (ret)
+		pr_err("%s: Failed to write register (%d).\n", __func__, ret);
 
-	return 0;
+	return ret;
 }
 
 static long bu21150_ioctl_unblock(void)
@@ -1444,8 +1629,6 @@ static long bu21150_ioctl_unblock_release(void)
 
 	ts->frame_waitq_flag = WAITQ_WAIT;
 
-	enable_irq(ts->client->irq);
-
 	return 0;
 }
 
@@ -1462,7 +1645,7 @@ static long bu21150_ioctl_resume(void)
 
 	ts->force_unblock_flag = 0;
 
-	enable_irq(ts->client->irq);
+	bu21150_enable_irq(ts);
 
 	return 0;
 }
@@ -1506,8 +1689,7 @@ static long bu21150_ioctl_set_scan_mode(unsigned long arg)
 
 	mutex_lock(&ts->mutex_wake);
 
-	if (ts->stay_awake && ts->wake_up &&
-			ts->scan_mode != AFE_SCAN_GESTURE_SELF_CAP) {
+	if (ts->stay_awake && ts->wake_up) {
 		pm_relax(&ts->client->dev);
 		ts->stay_awake = false;
 	}
@@ -1521,6 +1703,7 @@ static irqreturn_t bu21150_irq_thread(int irq, void *dev_id)
 {
 	struct bu21150_data *ts = dev_id;
 	u8 *psbuf = (u8 *)ts->frame_work;
+	int ret;
 
 	mutex_lock(&ts->mutex_wake);
 
@@ -1534,7 +1717,12 @@ static irqreturn_t bu21150_irq_thread(int irq, void *dev_id)
 
 	/* get frame */
 	ts->frame_work_get = ts->req_get;
-	bu21150_read_register(REG_READ_DATA, ts->frame_work_get.size, psbuf);
+	ret = bu21150_read_register(REG_READ_DATA,
+			ts->frame_work_get.size, psbuf);
+	if (ret) {
+		pr_err("%s: failed to read frame (%d)\n", __func__, ret);
+		goto err_read_reg;
+	}
 
 	if (ts->reset_flag == 0) {
 #ifdef CHECK_SAME_FRAME
@@ -1546,6 +1734,7 @@ static irqreturn_t bu21150_irq_thread(int irq, void *dev_id)
 		ts->reset_flag = 0;
 	}
 
+err_read_reg:
 	return IRQ_HANDLED;
 }
 
@@ -1576,11 +1765,12 @@ static int bu21150_read_register(u32 addr, u16 size, u8 *data)
 	req->xfer[0].bits_per_word = SPI_BITS_PER_WORD_READ;
 	spi_message_add_tail(&req->xfer[0], &req->msg);
 	ret = spi_sync(client, &req->msg);
-	if (ret)
-		pr_err("%s : spi_sync read data error:ret=[%d]", __func__, ret);
-
-	memcpy(data, output+SPI_HEADER_SIZE, size);
-	swap_2byte(data, size);
+	if (ret) {
+		pr_err("%s: spi_sync read data error:ret=[%d]", __func__, ret);
+	} else {
+		memcpy(data, output+SPI_HEADER_SIZE, size);
+		swap_2byte(data, size);
+	}
 
 	kfree(req);
 	kfree(input);
@@ -1619,7 +1809,7 @@ static int bu21150_write_register(u32 addr, u16 size, u8 *data)
 	spi_message_add_tail(&req->xfer[0], &req->msg);
 	ret = spi_sync(client, &req->msg);
 	if (ret)
-		pr_err("%s : spi_sync read data error:ret=[%d]", __func__, ret);
+		pr_err("%s: spi_sync write data error:ret=[%d]", __func__, ret);
 
 	kfree(req);
 	kfree(input);
@@ -1653,6 +1843,7 @@ static long wait_frame_waitq(struct bu21150_data *ts, u8 flag)
 		if (ts->timeout_flag == 1) {
 			ts->set_timer_flag = 0;
 			ts->timeout_flag = 0;
+			pr_err("%s: return BU21150_TIMEOUT\n", __func__);
 			return BU21150_TIMEOUT;
 		}
 	}
@@ -1684,10 +1875,27 @@ static int is_same_bu21150_ioctl_get_frame_data(
 
 static void copy_frame(struct bu21150_data *ts)
 {
+	struct bu21150_frame *temp;
+
 	mutex_lock(&(ts->mutex_frame));
+	/* check for max limit */
+	if (ts->frame_count >= BU21150_LIST_MAX_FRAMES) {
+		struct bu21150_frame *tmp;
+
+		pr_err("max limit!!! frame_count=%d\n", ts->frame_count);
+		tmp = list_first_entry(&ts->frame_list.list,
+				struct bu21150_frame, list);
+		list_del(&tmp->list);
+		kfree(tmp);
+		ts->frame_count--;
+	}
+
+	temp = kzalloc(sizeof(struct bu21150_frame), GFP_KERNEL);
 	ts->frame_get = ts->frame_work_get;
-	memcpy(ts->frame, ts->frame_work, MAX_FRAME_SIZE);
-	do_gettimeofday(&(ts->tv));
+	memcpy(temp->frame, ts->frame_work, MAX_FRAME_SIZE);
+	do_gettimeofday(&(temp->tv));
+	list_add_tail(&(temp->list), &(ts->frame_list.list));
+	ts->frame_count++;
 	mutex_unlock(&(ts->mutex_frame));
 }
 
@@ -1709,10 +1917,23 @@ static void swap_2byte(unsigned char *buf, unsigned int size)
 static void check_same_frame(struct bu21150_data *ts)
 {
 	static int frame_no = -1;
-	u16 *ps = (u16 *)ts->frame;
-	if (ps[2] == frame_no)
-		pr_err("%s:same_frame_no=[%d]\n", __func__, frame_no);
-	frame_no = ps[2];
+	u16 *ps;
+	struct bu21150_frame *temp;
+	struct list_head *pos, *n;
+
+	mutex_lock(&ts->mutex_frame);
+	if (!list_empty(&ts->frame_list.list)) {
+		/* get the last node */
+		temp = list_entry(&ts->frame_list.list->prev,
+				struct bu21150_frame, list);
+
+		ps = (u16 *)temp->frame;
+
+		if (ps[2] == frame_no)
+			pr_err("%s:same_frame_no=[%d]\n", __func__, frame_no);
+		frame_no = ps[2];
+	}
+	mutex_unlock(&ts->mutex_frame);
 }
 #endif
 

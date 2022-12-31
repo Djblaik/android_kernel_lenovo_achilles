@@ -1040,6 +1040,28 @@ config TOUCHSCREEN_GT9XX
 
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 
+config TOUCHSCREEN_FTS
+	bool "Focaltech touchpanel FT5626 series"
+	depends on I2C
+	help
+	  Say Y here if you have a Focaltech FT5626 touchscreen.
+	  FT5626 controllers are multi touch controllers which can
+	  report 5 touches at a time.
+
+          If unsure, say N.
+
+config TOUCHSCREEN_GT9110
+	bool "Goodix touchpanel GT9110 series"
+	depends on I2C
+	help
+	  Say Y here if you have a Goodix GT9110 touchscreen.
+	  GT9110 controllers are multi touch controllers which can
+	  report 5 touches at a time.
+
+          If unsure, say N.
+
+source "drivers/input/touchscreen/GT9110/Kconfig"
+
 config TOUCHSCREEN_BU21150
 	tristate "JDI AFE BU21150"
 	depends on SPI_MASTER
@@ -1062,30 +1084,16 @@ config INPUT_MT_WRAPPER
 
 	  If unsure, say N.
 
-#add by litao begin
-config TOUCHSCREEN_FT5X36
-       tristate "FocalTech touchscreens FT5X36"
-       depends on I2C
-       help
-         Say Y here if you have a ft5X36 touchscreen.
-	 Ft5x36 controllers are multi touch controllers which can
-	 report 5 touches at a time.
-
-         If unsure, say N.
-
-         To compile this driver as a module, choose M here: the
-         module will be called ft5x36_ts.
-	 
-config TOUCHSCREEN_MSG22XX
-	bool "Mstar touchpanel MSG22XX series"
+config TOUCHSCREEN_IT7260_I2C
+	tristate "IT7260 Touchscreen Driver"
 	depends on I2C
 	help
-	  Say Y here if you have a Mstar MSG22XX touchscreen.
-	  MSG22XX controllers are multi touch controllers which can
-	  report 5 touches at a time.
+	  Say Y here if you have a IT7260 Touchscreen Driver
+	  connected to your system.
 
-          If unsure, say N.
-	  
-source "drivers/input/touchscreen/msg22xx/Kconfig"
-#add by litao end
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called it7258_ts_i2c.
+
 endif
